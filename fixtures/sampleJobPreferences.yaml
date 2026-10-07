@@ -1,0 +1,30 @@
+compensation:
+  currency: USD
+  minAcceptableBase: 150000
+  targetBase: 180000
+  countsBonusTowardMin: false
+  countsEquityTowardMin: false
+
+clearance:
+  currentStatus: none
+  currentLevel: null
+  eligibleToObtain: true
+  requiresSponsorshipForVisa: false
+
+nonNegotiables: []
+
+preferredLocations: []
+
+targetRoles: []
+
+# Config-driven directories (all null = current behavior). Precedence: CLI
+# flag > directories.* here > WEJOBSEARCHDATAROOT environment value >
+# canonical default (~/Documents/weJobSearch/<username>/).
+directories:
+  dataRoot: null
+  outputRoot: null
+  resumeVariantsFile: null
+
+# Search-result cache freshness window in minutes (SRA-06). Optional; when
+# absent the engine falls back to its documented default (30).
+searchCacheTtlMinutes: 30

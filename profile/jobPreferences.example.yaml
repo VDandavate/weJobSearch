@@ -1,0 +1,49 @@
+# Blank template (SDD Requirement 1a). The real jobPreferences.yaml lives under
+# the canonical data root (~/Documents/weJobSearch/<username>/), created via the
+# `init` wizard; set real values there. Values here are structural placeholders
+# only and are never read at runtime.
+
+compensation:
+  currency: USD
+  minAcceptableBase: 0
+  targetBase: 0
+  countsBonusTowardMin: false
+  countsEquityTowardMin: false
+
+clearance:
+  currentStatus: none
+  currentLevel: null
+  eligibleToObtain: true
+  requiresSponsorshipForVisa: false
+
+nonNegotiables: []
+
+# Preferred locations. Empty means "no location preference": with no location
+# nonNegotiables configured, postings are never penalized for location.
+preferredLocations: []
+
+# Location rules are user-configured, never built in. Example (uncomment to
+# use): a rule with id "remoteOnly" is an ordinary location-category
+# nonNegotiable — its behavior comes from preferredLocations above, not from
+# the id string. It is distinct from the --remoteOnly CLI display filter, which
+# only narrows rendered search results and never reaches the fit evaluator.
+# nonNegotiables:
+#   - id: remoteOnly
+#     category: location
+#     rule: "flag for manualReview if posting is fully onsite"
+
+# Config-driven directories (all optional, null = current behavior). Precedence:
+# CLI flag > directories.* here > WEJOBSEARCHDATAROOT environment value >
+# canonical default (~/Documents/weJobSearch/<username>/).
+directories:
+  dataRoot: null
+  outputRoot: null
+  resumeVariantsFile: null
+
+# Roles/titles the user is targeting (EUO-02, G6). Plain data list, not a rule
+# engine; consumed by role suggestion and profile-driven search.
+targetRoles: []
+
+# Search-result cache freshness window in minutes (SRA-06). Optional; when
+# absent the engine falls back to its documented default (30).
+searchCacheTtlMinutes: 30

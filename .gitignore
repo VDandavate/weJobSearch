@@ -1,0 +1,33 @@
+.DS_Store
+*.swp
+.vscode/
+
+# Local agent/host settings (may hold machine paths or credentials).
+.claude/settings.local.json
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Reference clone of MadsLorentzen/ai-job-search (SDD Section 1.3). Never committed.
+.reference/
+
+# Real profile data lives under the canonical data root
+# (~/Documents/weJobSearch/<username>/, src/utils/canonicalDataRoot.ts), which is
+# outside the git work tree and therefore can never be committed. The in-repo
+# profile/ directory ships only the committed .example.* templates and the
+# resumeVariants.yaml structure seed. The entries below are a defensive
+# backstop in case a real-looking file is ever dropped next to the templates.
+profile/masterProfile.md
+profile/jobPreferences.yaml
+profile/screeningAnswers.json
+profile/networkingContacts.json
+profile/applicationHistory.json
+
+# Local application tracking database and per-role output (SDD Requirement 4).
+applications/
+
+# Environment secrets (SDD Section 5).
+.env
+.env.*
+!.env.example

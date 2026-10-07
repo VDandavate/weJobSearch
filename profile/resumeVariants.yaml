@@ -1,0 +1,25 @@
+# resumeVariants.yaml - structure seed, no personal data (SDD Requirement 3).
+# The init wizard copies this seed to the canonical data root
+# (~/Documents/weJobSearch/<username>/resumeVariants.yaml) on first run; the
+# working copy maps a resume variant name to a Typst template and the
+# posting-metadata trigger conditions that auto-select it in the generate
+# command (which also accepts an explicit --variant flag). The referenced
+# templates ship under templates/ (SDD Section 2.2).
+#
+# Relative template paths below resolve through the template allowlist: the
+# shipped templates/ directory first, then <dataRoot>/templates/ for
+# user-supplied templates. Absolute template paths must already sit inside
+# one of those two roots.
+
+variants:
+  # Default variant: no triggers, always eligible.
+  usStandardResume:
+    template: templates/usStandardResume.typ
+    triggers: {}
+
+  # Variant for federal / government-sponsored-enterprise postings.
+  usDetailedResume:
+    template: templates/usDetailedResume.typ
+    triggers:
+      targetsFederal: true
+      domainTag: GSE

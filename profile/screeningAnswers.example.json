@@ -1,0 +1,21 @@
+{
+  "workAuthorization": {
+    "usCitizen": false,
+    "requiresSponsorship": false,
+    "sponsorshipType": null
+  },
+  "compensation": {
+    "minBaseSalary": 0,
+    "targetBaseSalary": 0,
+    "currency": "USD"
+  },
+  "standardQuestions": {
+    "yearsOfExperience": {
+      "softwareEngineering": 0,
+      "typescript": 0,
+      "python": 0
+    },
+    "preferredWorkLocation": "REPLACE_ME",
+    "noticePeriod": "REPLACE_ME"
+  }
+}

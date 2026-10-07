@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+
+# Pre-commit naming gate (AGENTS.md Step 8, SDD Sections 2.1 and 7).
+#
+# Runs the naming linter against the whole project tree and rejects the commit
+# when any project-owned file name, TypeScript identifier, or JSON/YAML key
+# violates the strict camelCase / PascalCase / zero-underscore convention.
+#
+# The linter never modifies files; it only reports. Fix the reported names and
+# re-stage before committing.
+
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Absolute-path guard (clone discipline 2026-10-06, narrowed in the
+# single-docs restructure: internal-process docs are tracked by decision and
+# excluded from the public export by scripts/exportFilter.mjs, so no staged
+# path is categorically blocked anymore).
+#
+# This checkout is the single canonical working copy. The guard rejects staged
+# content containing /Users/ (absolute local paths must never be tracked;
+# placeholders use the <username> form). This guard file is the one path
+# allowed to name the pattern it guards, so it excludes itself from the scan,
+# and the leak-gate pattern text (which legitimately names /Users/) is
+# self-excluded exactly as the Phase 0 leak gate self-excludes it.
+if git diff --cached -- . ':(exclude).githooks/pre-commit' | grep "^+" | grep -v "^+++" | grep "/Users/" | grep -v "grep -H -n -i -E" | grep -q .; then
+  echo "Commit blocked: staged content contains an absolute /Users/ path."
+  echo "Use the <username> placeholder form instead."
+  exit 1
+fi
+
+if ! npm run namingLinter; then
+  echo
+  echo "Commit blocked: naming violations detected above."
+  echo "Rename the reported identifiers/keys/files per the cascade messages and re-stage."
+  exit 1
+fi
+
+exit 0

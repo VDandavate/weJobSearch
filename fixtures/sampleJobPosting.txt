@@ -1,0 +1,28 @@
+Senior Platform Engineer at AcmeCorp
+======================================
+
+Location: Remote
+Employment: Full-time
+Salary: USD 165,000 - 195,000/yr
+
+About the role
+--------------
+AcmeCorp builds financial infrastructure for fintech companies. We provide the underlying payments and ledger systems that power a generation of modern finance. The platform team is responsible for the Kubernetes platform, TypeScript services, and AWS tooling used across the engineering organization.
+
+What you will do
+----------------
+- Own the Kubernetes platform used by 200+ microservices.
+- Build and maintain TypeScript services on AWS.
+- Partner with engineers to make AWS infrastructure look like a product.
+
+Requirements
+------------
+- 6+ years of experience
+- TypeScript
+- Kubernetes
+- AWS
+- FinTech domain experience
+
+About us
+--------
+This is a sample synthetic employer for automated tests. Any resemblance to a real company is coincidental.

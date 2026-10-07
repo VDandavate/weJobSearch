@@ -1,0 +1,37 @@
+{
+  "name": "wejobsearch",
+  "version": "0.1.0-beta",
+  "description": "Deterministic, tool-agnostic job search engine. Refactor of MadsLorentzen/ai-job-search per docs/weJobSearch-SDD.md.",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "namingLinter": "node scripts/namingLinterCheck.mjs",
+    "setup": "node scripts/setupCheck.mjs",
+    "setupHooks": "git config core.hooksPath .githooks",
+    "init": "node dist/cli/jobSearchCore.js init",
+    "evaluate": "node dist/cli/jobSearchCore.js evaluate",
+    "generate": "node dist/cli/jobSearchCore.js generate",
+    "report": "node dist/cli/jobSearchCore.js report"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@myriaddreamin/typst-ts-web-compiler": "^0.7.0",
+    "@myriaddreamin/typst.ts": "^0.7.0",
+    "mammoth": "^1.12.1",
+    "pdf-parse": "^2.4.5",
+    "tar": "^7.5.22",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

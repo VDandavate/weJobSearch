@@ -1,0 +1,35 @@
+{
+  "applications": [
+    {
+      "applicationId": "app2026AcmeCorpSeniorPlatformEngineer",
+      "companyName": "AcmeCorp",
+      "roleTitle": "Senior Platform Engineer",
+      "jobUrl": "https://acme.example.com/jobs/senior-platform-engineer",
+      "postingHash": "a5c98a2b0b660d22a6940b5105468d5e13aebb1c5b5606a12827ed1dc0ac008c",
+      "sourceAggregators": ["hiringCafe"],
+      "salaryRange": "USD 165000 - 195000/yr",
+      "fitScore": 4.8,
+      "fitStatus": "strongFit",
+      "referralContact": null,
+      "status": "evaluated",
+      "statusHistory": [{ "stage": "evaluated", "timestamp": "2026-07-01T10:00:00Z" }]
+    },
+    {
+      "applicationId": "app2026AcmeCorpStaffEngineer",
+      "companyName": "AcmeCorp",
+      "roleTitle": "Staff Engineer",
+      "jobUrl": "https://acme.example.com/jobs/staff-engineer",
+      "postingHash": "9ef69971c8cc26ae779a546df372e9c020fc6ce533b30a78b4719da13bdff344",
+      "sourceAggregators": ["linkedin"],
+      "salaryRange": "USD 200000 - 240000/yr",
+      "fitScore": 4.5,
+      "fitStatus": "strongFit",
+      "referralContact": null,
+      "status": "appliedConfirmed",
+      "statusHistory": [
+        { "stage": "evaluated", "timestamp": "2026-04-01T10:00:00Z" },
+        { "stage": "appliedConfirmed", "timestamp": "2026-04-10T10:00:00Z" }
+      ]
+    }
+  ]
+}

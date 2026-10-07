@@ -1,0 +1,13 @@
+{
+  "contacts": [
+    {
+      "contactId": "REPLACE_ME",
+      "name": "REPLACE_ME",
+      "company": "REPLACE_ME",
+      "relationship": "formerColleague",
+      "lastContactDate": "REPLACE_ME",
+      "linkedApplicationIds": [],
+      "followUpDue": "REPLACE_ME"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md",
+    "docs/weJobSearch-SDD.md"
+  ],
+  "mcp": {
+    "jobSearch": {
+      "type": "local",
+      "command": [
+        "node",
+        "dist/mcp/jobSearchServer.js"
+      ],
+      "enabled": true
+    }
+  }
+}
