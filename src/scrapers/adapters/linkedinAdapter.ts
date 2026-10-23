@@ -1,11 +1,7 @@
-import { HttpStatusError, type RateLimiter } from '../rateLimiter';
-import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
-import { scraperUserAgent } from '../userAgent';
+import { type RateLimiter } from '../rateLimiter';
 import { fetchBoundedText } from '../httpFetcher';
 import { cleanText, decodeHtmlEntities, locationWorkMode, postingMatchesLocation, stripTags } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
-
-const userAgent = scraperUserAgent;
 
 // Technique ported from .reference/aiJobSearch/.agents/skills/linkedin-search/
 // per SDD Section 1.3: LinkedIn public "jobs-guest" endpoints, unauthenticated.
@@ -382,26 +378,7 @@ export class LinkedInAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `LinkedIn request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
   }
 
   private toRawPosting(card: LinkedInJobCard, detail: LinkedInJobDetail): RawPosting {

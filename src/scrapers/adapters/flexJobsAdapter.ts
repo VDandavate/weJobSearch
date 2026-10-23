@@ -1,6 +1,5 @@
-import { HttpStatusError, type RateLimiter } from '../rateLimiter';
-import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
-import { scraperUserAgent } from '../userAgent';
+import { type RateLimiter } from '../rateLimiter';
+import { fetchBoundedText } from '../httpFetcher';
 import { extractNextDataJson, tokenize, trimText } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
@@ -63,7 +62,6 @@ export const flexJobsClientSideFilterWarning =
 // blank string.
 export const flexJobsUnknownLocationLabel = 'unknown';
 
-const userAgent = scraperUserAgent;
 const maxPostings = 20;
 
 export interface FlexJobsCompany {
@@ -307,24 +305,6 @@ export class FlexJobsAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `FlexJobs listing request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url);
   }
 }

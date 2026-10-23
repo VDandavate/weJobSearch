@@ -1,6 +1,5 @@
-import { HttpStatusError, type RateLimiter } from '../rateLimiter';
-import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
-import { scraperUserAgent } from '../userAgent';
+import { type RateLimiter } from '../rateLimiter';
+import { fetchBoundedText } from '../httpFetcher';
 import { cleanText, extractNextDataJson } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
@@ -37,8 +36,6 @@ import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 //     not reliably embed the final URL.
 
 export const hiringCafeBaseUrl = 'https://hiringcafe.com';
-
-const userAgent = scraperUserAgent;
 
 const nextDataScriptId = '__NEXT_DATA__';
 
@@ -275,24 +272,6 @@ export class HiringCafeAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `HiringCafe request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url);
   }
 }

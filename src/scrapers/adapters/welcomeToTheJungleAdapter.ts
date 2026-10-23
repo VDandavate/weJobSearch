@@ -1,7 +1,6 @@
 import { gunzipSync } from 'zlib';
-import { HttpStatusError, type RateLimiter } from '../rateLimiter';
-import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
-import { scraperUserAgent } from '../userAgent';
+import { type RateLimiter } from '../rateLimiter';
+import { fetchBoundedBytes, fetchBoundedText, maxSitemapResponseBytes } from '../httpFetcher';
 import { cleanText, tokenize } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
@@ -69,7 +68,6 @@ export const welcomeToTheJungleClientSideFilterWarning =
 // blank string.
 export const welcomeToTheJungleUnknownLocationLabel = 'unknown';
 
-const userAgent = scraperUserAgent;
 const maxSitemaps = 6;
 const candidateCap = 60;
 const maxPostings = 20;
@@ -526,49 +524,16 @@ export class WelcomeToTheJungleAdapter implements SourceAdapter {
   private async fetchText(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `WelcomeToTheJungle request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url);
   }
 
   private async fetchGzipText(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'application/x-gzip,application/xml,text/xml,*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
+    const bytes = await fetchBoundedBytes(url, {
+      maxBytes: maxSitemapResponseBytes,
+      headers: { Accept: 'application/x-gzip,application/xml,text/xml,*/*' },
     });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `WelcomeToTheJungle sitemap request failed with status ${response.status}`,
-      );
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    return decodeGzipBuffer(new Uint8Array(arrayBuffer));
+    return bytes === null ? '' : decodeGzipBuffer(bytes);
   }
 }

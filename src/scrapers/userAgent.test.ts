@@ -35,11 +35,14 @@ describe('shared scraper User-Agent (U03c)', () => {
     expect(scraperUserAgent).toContain(`wejobsearch/${packageManifest.version}`);
   });
 
-  it('is the only User-Agent literal across all six adapters', () => {
+  it('is carried only by the shared bounded fetcher, never a per-adapter literal', () => {
     expect(adapterFiles).toHaveLength(6);
+    const fetcher = readFileSync(join(__dirname, 'httpFetcher.ts'), 'utf8');
+    expect(fetcher).toContain('scraperUserAgent');
     for (const file of adapterFiles) {
       const source = readFileSync(join(__dirname, 'adapters', file), 'utf8');
-      expect(source).toContain('scraperUserAgent');
+      // Every adapter routes its HTTP through the shared fetcher.
+      expect(source).toContain('../httpFetcher');
       expect(source).not.toMatch(/wejobsearch\/0\.\d+\.\d+/);
       expect(source).not.toMatch(/Mozilla\/5\.0 \(compatible; wejobsearch\//);
     }
