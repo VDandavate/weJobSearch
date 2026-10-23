@@ -36,7 +36,7 @@ import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 //     on the listing page, keyed by requisition id, because the island does
 //     not reliably embed the final URL.
 
-export const hiringCafeBaseUrl = 'https://hiring.cafe';
+export const hiringCafeBaseUrl = 'https://hiringcafe.com';
 
 const userAgent = scraperUserAgent;
 

@@ -1,8 +1,11 @@
 import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
-import { cleanText, decodeHtmlEntities, stripTags } from '../htmlUtils';
+import { fetchBoundedText } from '../httpFetcher';
+import { cleanText, decodeHtmlEntities, locationWorkMode, postingMatchesLocation, stripTags } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+
+const userAgent = scraperUserAgent;
 
 // Technique ported from .reference/aiJobSearch/.agents/skills/linkedin-search/
 // per SDD Section 1.3: LinkedIn public "jobs-guest" endpoints, unauthenticated.
@@ -14,8 +17,6 @@ import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
 export const searchUrl = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
 export const detailUrl = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting';
-
-const userAgent = scraperUserAgent;
 
 export type LinkedInWorkplaceType = 'onsite' | 'remote' | 'hybrid';
 

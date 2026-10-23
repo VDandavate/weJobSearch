@@ -16,17 +16,23 @@ const adapterFiles = [
   'flexJobsAdapter.ts',
 ];
 
+// Read once, so the assertion follows the manifest instead of hardcoding a
+// version shape. The prerelease suffix (0.1.0-beta) is part of the token.
+const packageManifest = JSON.parse(
+  readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'),
+) as { version: string };
+
 describe('shared scraper User-Agent (U03c)', () => {
   it('carries a versioned compatible token', () => {
-    expect(scraperUserAgent).toMatch(/Mozilla\/5\.0 \(compatible; wejobsearch\/\d+\.\d+\.\d+\)/);
+    expect(packageManifest.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+    expect(scraperUserAgent).toBe(
+      `Mozilla/5.0 (compatible; wejobsearch/${packageManifest.version})`,
+    );
   });
 
   it('derives its version from package.json so the two can never drift', () => {
-    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
-      version: string;
-    };
-    expect(packageVersion()).toBe(pkg.version);
-    expect(scraperUserAgent).toContain(`wejobsearch/${pkg.version}`);
+    expect(packageVersion()).toBe(packageManifest.version);
+    expect(scraperUserAgent).toContain(`wejobsearch/${packageManifest.version}`);
   });
 
   it('is the only User-Agent literal across all six adapters', () => {

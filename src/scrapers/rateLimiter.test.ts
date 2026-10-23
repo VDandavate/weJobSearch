@@ -5,10 +5,14 @@ import {
   type SourceAdapter,
 } from './jobSpyAdapter';
 import {
+  computeEffectiveWaitMs,
   HttpStatusError,
+  isDisallowedByGroup,
   RateLimitHardStopError,
   RateLimiter,
+  robotsRuleMatchesPath,
   type RateLimitConfig,
+  type RobotsGroup,
 } from './rateLimiter';
 
 // B7b: the tripped breaker is latched across searchAll runs until breakerTtlMs
@@ -373,5 +377,102 @@ describe('robots cache TTL (U42/B9)', () => {
     await limiter.assertPathAllowed('https://example.com/jobs/1');
     await limiter.assertPathAllowed('https://example.com/jobs/2');
     expect(fetches).toBe(1);
+  });
+});
+
+describe('robots rule matching (finding 11)', () => {
+  function group(allows: string[], disallows: string[]): RobotsGroup {
+    return { userAgents: ['*'], allows, disallows, crawlDelayMs: null };
+  }
+
+  it.each([
+    ['/*?searchState=*', '/jobs?searchState=abc', true],
+    ['/*?searchState=*', '/jobs?location=Remote', false],
+    ['*/api/*', '/v1/api/jobs', true],
+    ['*/api/*', '/api/', true],
+    ['*/api/*', '/v1/apix/jobs', false],
+    ['/*.asmx', '/Services/Jobs.asmx', true],
+    ['/*.asmx', '/Services/Jobs.aspx', false],
+    ['/me/*', '/me/profile', true],
+    ['/me/*', '/me/', true],
+    ['/me/*', '/member', false],
+  ])('matches the wildcard rule %s against %s', (rule, path, expected) => {
+    expect(robotsRuleMatchesPath(rule, path)).toBe(expected);
+  });
+
+  it('anchors a trailing $ and otherwise matches as a prefix', () => {
+    expect(robotsRuleMatchesPath('/job$', '/job')).toBe(true);
+    expect(robotsRuleMatchesPath('/job$', '/jobs')).toBe(false);
+    expect(robotsRuleMatchesPath('/job', '/jobs')).toBe(true);
+  });
+
+  it('treats the empty rule and / as matching every path', () => {
+    expect(robotsRuleMatchesPath('', '/anything?x=1')).toBe(true);
+    expect(robotsRuleMatchesPath('/', '/anything?x=1')).toBe(true);
+  });
+
+  it('lets the longest matching rule win', () => {
+    const rules = group(['/jobs/remote'], ['/jobs']);
+    expect(isDisallowedByGroup(rules, '/jobs/remote/1')).toBe(false);
+    expect(isDisallowedByGroup(rules, '/jobs/other')).toBe(true);
+  });
+
+  it('compares wildcard rules by their literal prefix', () => {
+    const rules = group(['/public/*'], ['/*']);
+    expect(isDisallowedByGroup(rules, '/public/jobs')).toBe(false);
+    expect(isDisallowedByGroup(rules, '/private/jobs')).toBe(true);
+  });
+
+  it('lets Allow beat Disallow when specificity ties', () => {
+    expect(isDisallowedByGroup(group(['/jobs'], ['/jobs']), '/jobs/1')).toBe(false);
+    expect(isDisallowedByGroup(group([], ['/jobs']), '/jobs/1')).toBe(true);
+  });
+
+  it('matches the path plus query at the enforcement seam', async () => {
+    const limiter = new RateLimiter({
+      sourceName: 'robotsQuery',
+      minDelayMs: 0,
+      maxDelayMs: 0,
+      respectRobotsTxt: true,
+      robotsTxtFetcher: async () => 'User-agent: *\nDisallow: /*?searchState=*\n',
+    });
+    await expect(
+      limiter.assertPathAllowed('https://example.com/jobs?searchState=abc'),
+    ).rejects.toThrow(/disallows/);
+    await expect(limiter.assertPathAllowed('https://example.com/jobs?location=Remote')).resolves.toBeUndefined();
+  });
+});
+
+describe('effective wait (finding 12)', () => {
+  it('adds the scheduled backoff to the politeness delay instead of taking the maximum', () => {
+    expect(computeEffectiveWaitMs(2000, 1000)).toBe(3000);
+    expect(computeEffectiveWaitMs(5000, 1000)).toBe(6000);
+    expect(computeEffectiveWaitMs(2000, 0)).toBe(2000);
+  });
+
+  it('grows the scheduled backoff exponentially until the configured cap', () => {
+    const limiter = zeroDelayLimiter('additiveBackoff', {
+      backoffBaseMs: 1000,
+      backoffMaxMs: 5000,
+      maxConsecutiveFailures: 10,
+    });
+    limiter.recordFailure(429);
+    expect(limiter.getNextBackoffDelayMs()).toBe(1000);
+    limiter.recordFailure(429);
+    expect(limiter.getNextBackoffDelayMs()).toBe(2000);
+    limiter.recordFailure(429);
+    expect(limiter.getNextBackoffDelayMs()).toBe(4000);
+    limiter.recordFailure(429);
+    expect(limiter.getNextBackoffDelayMs()).toBe(5000);
+    limiter.recordFailure(429);
+    expect(limiter.getNextBackoffDelayMs()).toBe(5000);
+  });
+
+  it('resets the scheduled backoff after a success', () => {
+    const limiter = zeroDelayLimiter('resetBackoff', { backoffBaseMs: 1000, backoffMaxMs: 10000 });
+    limiter.recordFailure(503);
+    expect(limiter.getNextBackoffDelayMs()).toBe(1000);
+    limiter.recordSuccess();
+    expect(limiter.getNextBackoffDelayMs()).toBe(0);
   });
 });

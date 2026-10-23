@@ -71,12 +71,15 @@ function escapeRegExpToken(value: string): string {
 // Whole-token matching shared by the ATS checker, the hallucination guards,
 // and the requirements extractor (U41/B1-B2/R1): a plain substring lets
 // excluded 'java' hit 'javascript', while \b word boundaries can never match
-// tokens ending in non-word characters ('C#', 'C++', '.NET'). Alphanumeric
-// lookarounds match both classes precisely, and whitespace collapsing keeps
-// multi-word terms working across line breaks.
+// tokens ending in non-word characters ('C#', 'C++', '.NET'). `#` and `+` are
+// token characters on both sides so C never matches C# or C++, and a leading
+// `.` belongs to the token so NET never matches .NET. A trailing `.` stays a
+// sentence boundary (Java. still matches Java), so ordinary words are
+// unaffected. Whitespace collapsing keeps multi-word terms working across
+// line breaks.
 export function tokenPattern(term: string): RegExp {
   const normalized = term.toLowerCase().replace(/\s+/g, ' ').trim();
-  return new RegExp(`(?<![A-Za-z0-9])${escapeRegExpToken(normalized)}(?![A-Za-z0-9])`, 'i');
+  return new RegExp(`(?<![A-Za-z0-9+#.])${escapeRegExpToken(normalized)}(?![A-Za-z0-9+#])`, 'i');
 }
 
 export function matchesWholeToken(text: string, keyword: string): boolean {

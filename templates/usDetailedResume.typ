@@ -257,10 +257,6 @@
 
 #align(center)[
   #text(size: 16pt, weight: "bold")[#p.name]
-  #if p.cityState != "" {
-    v(2pt)
-    text(size: 9.5pt)[#p.cityState]
-  }
   #v(2pt)
   #text(size: 9.5pt)[#contactLine(p)]
 ]

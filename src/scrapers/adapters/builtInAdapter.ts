@@ -107,12 +107,11 @@ export interface BuiltInSalaryData {
   unitText: string;
 }
 
-// BuiltIn's historical decoder flavor: lowercase-hex only, unclamped code
-// points. Preserved byte-for-byte via options so the shared superset decoder
-// does not change what this source emits.
+// BuiltIn's historical decoder flavor: lowercase-hex only. Invalid code points
+// now degrade to U+FFFD in the shared decoder instead of throwing, so one bad
+// byte costs one posting rather than the whole source.
 const builtInDecodeOptions = {
   allowUppercaseHexPrefix: false,
-  clampInvalidCodePoints: false,
 } as const;
 
 function builtInTokenize(value: string): string[] {
@@ -342,7 +341,8 @@ export function postingToRawPosting(
   }
   const rawLocation = locationFromPosting(posting);
   const location = rawLocation.length > 0 ? rawLocation : unknownLocationLabel;
-  const description = cleanText(trimText(posting.description), builtInDecodeOptions);  const salary = salaryFromPosting(posting);
+  const description = cleanText(trimText(posting.description), builtInDecodeOptions);
+  const salary = salaryFromPosting(posting);
   let rawSalaryText: string | undefined;
   if (salary !== null) {
     const period =

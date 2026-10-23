@@ -191,6 +191,49 @@ export async function logApplication(
   return record;
 }
 
+export interface AppendApplicationHistoryResult {
+  added: ApplicationRecord[];
+  duplicates: ApplicationRecord[];
+}
+
+// Batch append (audit finding 7): one read, one schema validation, one merge,
+// one atomic write for the whole batch instead of a read-rewrite per posting.
+// Identity is postingHash, as in logApplication: a hash already in the file or
+// earlier in the same batch is reported as a duplicate and never written, so a
+// duplicate inside the batch cannot fork a record. A malformed existing file
+// fails during the read, before anything is written.
+export async function appendApplicationHistory(
+  records: readonly ApplicationRecord[],
+  filePath?: string | null,
+  rootDir?: string | null,
+): Promise<AppendApplicationHistoryResult> {
+  const root = resolveStoreRoot(rootDir);
+  const resolvedPath = resolveStoreFilePath(filePath, resolveApplicationHistoryPath(undefined, root));
+  const history = await readApplicationHistory(resolvedPath, root);
+  const knownHashes = new Set(history.applications.map((application) => application.postingHash));
+  const added: ApplicationRecord[] = [];
+  const duplicates: ApplicationRecord[] = [];
+  for (const record of records) {
+    if (knownHashes.has(record.postingHash)) {
+      duplicates.push(record);
+      continue;
+    }
+    knownHashes.add(record.postingHash);
+    history.applications.push(record);
+    added.push(record);
+  }
+  if (added.length > 0) {
+    await writeJsonStoreFile({
+      data: history,
+      resolvedPath,
+      noun: 'application history',
+      schema: applicationHistorySchema,
+      confine: { root, label: 'appendApplicationHistory' },
+    });
+  }
+  return { added, duplicates };
+}
+
 export async function updateApplicationStatus(
   applicationId: string,
   newStatus: ApplicationStatus,

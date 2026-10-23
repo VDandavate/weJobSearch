@@ -237,7 +237,7 @@ function installSearchRoutes(): void {
 
   // hiring.cafe: two hits (AcmeVent strong fit; LevelUpLabs cross-source dup).
   route(
-    (url) => url === 'https://hiring.cafe/jobs/senior-platform-engineer-remote',
+    (url) => url === 'https://hiringcafe.com/jobs/senior-platform-engineer-remote',
     hiringCafeListingHtml([
       {
         requisitionId: 'abc123',

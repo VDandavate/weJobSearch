@@ -256,7 +256,27 @@ describe('buildOutreachMarkdown platform variants', () => {
       { companyName: 'AcmeCorp', roleTitle: 'SeniorMle', platform: 'linkedin' },
       'SRE background.',
     );
-    expect(recruiter).toContain('As a recruiter at SampleCorp,');
+    expect(recruiter).toContain("You're a recruiter at SampleCorp,");
+  });
+
+  it('recruiter lead makes the contact the recruiter, not the sender', () => {
+    const { binding } = bindingFor();
+    const recruiter = buildOutreachMarkdown(
+      binding,
+      {
+        contactId: 'contact002',
+        name: 'Sam Rivera',
+        company: 'SampleCorp',
+        relationship: 'recruiter',
+        lastContactDate: '2026-07-01',
+        linkedApplicationIds: [],
+        followUpDue: '',
+      },
+      { companyName: 'AcmeCorp', roleTitle: 'SeniorMle', platform: 'linkedin' },
+      'SRE background.',
+    );
+    expect(recruiter).toContain("You're a recruiter at SampleCorp, and I'm currently pursuing the");
+    expect(recruiter).not.toContain('As a recruiter');
   });
 
   it('every prose token traces to profile, scaffold, contact, or target for both platforms', () => {
@@ -278,15 +298,20 @@ describe('buildOutreachMarkdown platform variants', () => {
       ...contactTokens,
       ...targetTokens,
     ]);
+    // Every relationship lead is rendered, so a lead token that drifts out of
+    // outreachScaffoldTokens fails here instead of only for the default lead.
+    const relationships = ['formerColleague', 'manager', 'recruiter', 'friend', 'alumni', 'unlisted'];
     for (const platform of ['linkedin', 'email'] as const) {
-      const markdown = buildOutreachMarkdown(
-        binding,
-        contact,
-        { companyName: 'AcmeCorp', roleTitle: 'SeniorMle', platform },
-        'Site reliability engineer with deep experience in Kubernetes, distributed systems, and incident response.',
-      );
-      const hallucinated = hallucinatedProseTokens(markdown, allowedTokens);
-      expect(hallucinated).toEqual([]);
+      for (const relationship of relationships) {
+        const markdown = buildOutreachMarkdown(
+          binding,
+          { ...contact, relationship },
+          { companyName: 'AcmeCorp', roleTitle: 'SeniorMle', platform },
+          'Site reliability engineer with deep experience in Kubernetes, distributed systems, and incident response.',
+        );
+        const hallucinated = hallucinatedProseTokens(markdown, allowedTokens);
+        expect(hallucinated, `${platform}/${relationship}`).toEqual([]);
+      }
     }
   });
 

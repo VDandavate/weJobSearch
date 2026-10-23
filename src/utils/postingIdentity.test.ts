@@ -17,6 +17,25 @@ describe('matchesWholeToken', () => {
     expect(matchesWholeToken('No relevant background here.', 'C#')).toBe(false);
   });
 
+  it('distinguishes C from the symbol languages C# and C++', () => {
+    expect(matchesWholeToken('Built services in C#.', 'C')).toBe(false);
+    expect(matchesWholeToken('Built services in C++.', 'C')).toBe(false);
+    expect(matchesWholeToken('Built services in C.', 'C')).toBe(true);
+    expect(matchesWholeToken('Built services in C#, C++ and .NET.', 'C#')).toBe(true);
+    expect(matchesWholeToken('Built services in C#, C++ and .NET.', 'C++')).toBe(true);
+  });
+
+  it('distinguishes .NET from the plain word NET', () => {
+    expect(matchesWholeToken('Built services in .NET.', 'NET')).toBe(false);
+    expect(matchesWholeToken('Built services in .NET.', '.NET')).toBe(true);
+    expect(matchesWholeToken('Our NET runtime.', 'NET')).toBe(true);
+  });
+
+  it('keeps sentence-ending periods outside the token boundary', () => {
+    expect(matchesWholeToken('Built systems in Java.', 'Java')).toBe(true);
+    expect(matchesWholeToken('Writes Python and Go.', 'Go')).toBe(true);
+  });
+
   it('matches across line breaks and ignores case', () => {
     expect(matchesWholeToken('Deep background in Machine\nLearning systems.', 'machine learning')).toBe(true);
   });

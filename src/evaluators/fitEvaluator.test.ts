@@ -278,6 +278,28 @@ describe('evaluateFit: nonNegotiables gate per category', () => {
     expect(assessment.rejectedNonNegotiableIds).toContain('clearanceMismatch');
   });
 
+  it('clearance mentioned without a level routes to manualReview without zeroing the score', () => {
+    const assessment = evaluateFit({
+      posting: makePosting(),
+      requirements: emptyRequirements,
+      candidate: candidatePool,
+      postingFacts: { requiredClearanceLevel: 'unknown' },
+      preferences: makePreferences({
+        nonNegotiables: [
+          { id: 'clearanceMismatch', category: 'clearance', rule: 'reject above current' },
+        ],
+      }),
+    });
+    expect(assessment.fitStatus).toBe('manualReview');
+    expect(assessment.fitScore).toBe(5);
+    expect(assessment.rejectedNonNegotiableIds).toHaveLength(0);
+    expect(
+      assessment.nonNegotiableChecks.find((check) => check.id === 'clearanceMismatch')?.outcome,
+    ).toBe('unknown');
+    expect(assessment.notes.join(' ')).toContain('clearance');
+    expect(assessment.notes.join(' ')).toContain('manualReview');
+  });
+
   it('clearance eligibility to obtain true passes despite higher level', () => {
     const assessment = evaluateFit({
       posting: makePosting(),
