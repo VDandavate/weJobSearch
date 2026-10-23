@@ -1,4 +1,4 @@
-import { type RateLimiter } from '../rateLimiter';
+import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { fetchBoundedText } from '../httpFetcher';
 import { cleanText, extractNextDataJson } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
@@ -36,6 +36,21 @@ import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 //     not reliably embed the final URL.
 
 export const hiringCafeBaseUrl = 'https://hiringcafe.com';
+
+// Live probes from residential and CI networks return HTTP 403 from Cloudflare
+// on every public path (listing and root), even for an honest plain-HTTP GET.
+// That is an availability fact, not a parsing bug and not something this tool
+// may defeat (Section 1.4 forbids CAPTCHA/bot-detection bypass). Surfacing it
+// as a named error keeps the per-source summary honest: the source is reported
+// as failed, so the user knows coverage is reduced, rather than seeing a silent
+// zero. Not an HttpStatusError on purpose: a Cloudflare block is permanent, so
+// the limiter counts it once and never backs off or retries it.
+export class HiringCafeUnavailableError extends Error {
+  constructor(detail: string) {
+    super(`hiring.cafe is unavailable (${detail}); source coverage is reduced.`);
+    this.name = 'HiringCafeUnavailableError';
+  }
+}
 
 const nextDataScriptId = '__NEXT_DATA__';
 
@@ -272,6 +287,13 @@ export class HiringCafeAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    return fetchBoundedText(url);
+    try {
+      return await fetchBoundedText(url);
+    } catch (error) {
+      if (error instanceof HttpStatusError && error.statusCode === 403) {
+        throw new HiringCafeUnavailableError('HTTP 403 from Cloudflare');
+      }
+      throw error;
+    }
   }
 }
