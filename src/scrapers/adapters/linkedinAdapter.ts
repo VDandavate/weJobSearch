@@ -1,6 +1,6 @@
 import { type RateLimiter } from '../rateLimiter';
 import { fetchBoundedText } from '../httpFetcher';
-import { cleanText, decodeHtmlEntities, locationWorkMode, postingMatchesLocation, stripTags } from '../htmlUtils';
+import { cleanText, decodeHtmlEntities, postingMatchesLocation, stripTags } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
 // Technique ported from .reference/aiJobSearch/.agents/skills/linkedin-search/
@@ -319,7 +319,11 @@ export class LinkedInAdapter implements SourceAdapter {
         postings.push(this.toRawPosting(card, detail));
       }
     }
-    return postings;
+    // Location request enforcement (audit finding 14): the search URL sends a
+    // location, but LinkedIn does not reliably filter the cards. A 'Remote'
+    // request is a work-mode filter, not a city, and an unlocatable posting is
+    // never presented as a specific-location match.
+    return postings.filter((posting) => postingMatchesLocation(posting.location, location));
   }
 
   // Public detail lookup for later evaluate --jobUrl flows. Returns null when

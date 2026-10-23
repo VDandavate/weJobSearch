@@ -1,6 +1,6 @@
 import { type RateLimiter } from '../rateLimiter';
 import { fetchBoundedText } from '../httpFetcher';
-import { extractNextDataJson, trimText } from '../htmlUtils';
+import { extractNextDataJson, postingMatchesLocation, trimText } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
 // Technique built fresh from public site inspection (SDD Requirement 8, row 3)
@@ -261,7 +261,10 @@ export class WellfoundAdapter implements SourceAdapter {
         }
       }
     }
-    return postings;
+    // Location request enforcement (audit finding 14): Wellfound redirects a
+    // location path to the generic page, so the listing itself is not filtered.
+    // Apply the same work-mode/city check the other adapters use.
+    return postings.filter((posting) => postingMatchesLocation(posting.location, location));
   }
 
   // Every request gates on the shared limiter: robots.txt policy check then a
