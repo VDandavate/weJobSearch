@@ -344,3 +344,32 @@ describe('docsContract', () => {
     expect([...dispatched].sort()).toEqual([...commandNames].sort());
   });
 });
+
+  it('README references the setup command and the SDD', () => {
+    const readme = readDoc('README.md');
+    expect(readme).toContain('setup');
+    expect(readme).toContain('weJobSearch-SDD.md');
+  });
+
+  it('README does not contain the "That is the entire setup" passage', () => {
+    const readme = readDoc('README.md');
+    expect(readme).not.toContain('That is the entire setup');
+  });
+
+  it('README contains the radius limitation table', () => {
+    const readme = readDoc('README.md');
+    expect(readme).toContain('Radius limitation');
+    expect(readme).toContain('LinkedIn');
+    expect(readme).toContain('hiring.cafe');
+    expect(readme).toContain('Wellfound');
+    expect(readme).toContain('Welcome to the Jungle');
+    expect(readme).toContain('Built In');
+    expect(readme).toContain('FlexJobs');
+  });
+
+  it('README does not contradict the generated setup command', () => {
+    const readme = readDoc('README.md');
+    // The generated setup command says setup is agent-driven and never auto-runs search
+    // The phrase "never auto-runs a search" is consistent with the setup command
+    expect(readme).not.toContain('automatically run');
+  });
