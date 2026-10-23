@@ -448,7 +448,7 @@ Use each command's `--help` flag for the exact option set.
 ```bash
 npm run lint          # tsc --noEmit (type-check only)
 npm run build         # tsc (emit to dist/)
-npm test              # vitest run (935 tests across 59 files in this baseline)
+npm test              # vitest run (990 tests across 64 files in this baseline)
 npm run namingLinter  # strict camelCase/PascalCase/zero-underscore scan, no build needed
 npm run setupHooks    # per-clone: git config core.hooksPath .githooks
 ```
