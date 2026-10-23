@@ -159,6 +159,48 @@ describe('compExtractor', () => {
     expect(compensationFromPosting(source!)).toBeNull();
   });
 
+  it('ignores a bonus percentage in the salary text', () => {
+    expect(parseCompensation('USD 160,000 - 190,000 per year plus a 10% bonus')).toEqual({
+      currency: 'USD',
+      minAmount: 160000,
+      maxAmount: 190000,
+      period: 'year',
+    });
+  });
+
+  it('ignores a 401(k) reference and a years figure in the salary text', () => {
+    expect(
+      parseCompensation('USD 160,000 - 190,000 per year, 401(k) match, 5+ years of experience'),
+    ).toEqual({
+      currency: 'USD',
+      minAmount: 160000,
+      maxAmount: 190000,
+      period: 'year',
+    });
+  });
+
+  it('ignores an identifier or reference number in the salary text', () => {
+    expect(parseCompensation('USD 160,000 - 190,000 per year (Job ID 2024)')).toEqual({
+      currency: 'USD',
+      minAmount: 160000,
+      maxAmount: 190000,
+      period: 'year',
+    });
+  });
+
+  it('does not treat an hourly figure as a yearly bound', () => {
+    expect(parseCompensation('USD 30 - 45 per hour')).toEqual({
+      currency: 'USD',
+      minAmount: 30,
+      maxAmount: 45,
+      period: 'hour',
+    });
+  });
+
+  it('returns null when only stray numbers remain', () => {
+    expect(parseCompensation('Competitive salary plus a 10% bonus and 401(k) match')).toBeNull();
+  });
+
   it('handles single-value ranges as bound minimum', () => {
     const compensation = parseCompensation('USD 160,000/yr');
     expect(compensation).toEqual({

@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { create, extract, list } from 'tar';
-import { parse as parseYaml } from 'yaml';
+import { parseJobPreferences } from '../evaluators/fitEvaluator';
 import { canonicalDataRoot, isPathInside } from './canonicalDataRoot';
 import { applicationHistorySchema } from './jobFunnelTracker';
 import { networkingContactsSchema } from './networkingContacts';
@@ -208,6 +209,60 @@ export async function importDataRoot(options: ImportDataRootOptions): Promise<Im
     }
   }
 
+  // Validate the tracking files in a staging directory BEFORE the destination
+  // is created: a malformed archive leaves the destination untouched instead
+  // of importing bad data and failing on the next command. jobPreferences uses
+  // the same parser as read time (parseJobPreferences), not a YAML shape check.
+  // Only files the archive actually restored are checked; absent files are
+  // skipped so partial (profile-only, history-only) archives still import.
+  const stagingRoot = await mkdtemp(join(tmpdir(), 'weJobSearch-import-'));
+  try {
+    await extract({ file: archivePath, cwd: stagingRoot });
+    await validateRestoredFile(stagingRoot, join('applications', 'applicationHistory.json'), (raw) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        throw new Error(
+          `Refusing to import data root: restored 'applications/applicationHistory.json' is not valid JSON (${(error as Error).message}).`,
+        );
+      }
+      const result = applicationHistorySchema.safeParse(parsed);
+      if (!result.success) {
+        throw new Error(
+          `Refusing to import data root: restored 'applications/applicationHistory.json' fails schema validation (${result.error.message}).`,
+        );
+      }
+    });
+    await validateRestoredFile(stagingRoot, 'networkingContacts.json', (raw) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        throw new Error(
+          `Refusing to import data root: restored 'networkingContacts.json' is not valid JSON (${(error as Error).message}).`,
+        );
+      }
+      const result = networkingContactsSchema.safeParse(parsed);
+      if (!result.success) {
+        throw new Error(
+          `Refusing to import data root: restored 'networkingContacts.json' fails schema validation (${result.error.message}).`,
+        );
+      }
+    });
+    await validateRestoredFile(stagingRoot, 'jobPreferences.yaml', (raw) => {
+      try {
+        parseJobPreferences(raw);
+      } catch (error) {
+        throw new Error(
+          `Refusing to import data root: restored 'jobPreferences.yaml' fails schema validation (${(error as Error).message}).`,
+        );
+      }
+    });
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true });
+  }
+
   const restoredFiles: string[] = [];
   let entryCount = 0;
   await mkdir(rootPath, { recursive: true });
@@ -220,57 +275,6 @@ export async function importDataRoot(options: ImportDataRootOptions): Promise<Im
         restoredFiles.push(entry.path.replace(/^\.\//, ''));
       }
     },
-  });
-
-  // Schema validation (H1b): a restored tracking database that fails its
-  // schema is refused loudly instead of silently poisoning reporting. Only
-  // files the archive actually restored are checked; absent files are skipped.
-  await validateRestoredFile(rootPath, join('applications', 'applicationHistory.json'), (raw) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (error) {
-      throw new Error(
-        `Refusing to import data root: restored 'applications/applicationHistory.json' is not valid JSON (${(error as Error).message}).`,
-      );
-    }
-    const result = applicationHistorySchema.safeParse(parsed);
-    if (!result.success) {
-      throw new Error(
-        `Refusing to import data root: restored 'applications/applicationHistory.json' fails schema validation (${result.error.message}).`,
-      );
-    }
-  });
-  await validateRestoredFile(rootPath, 'networkingContacts.json', (raw) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (error) {
-      throw new Error(
-        `Refusing to import data root: restored 'networkingContacts.json' is not valid JSON (${(error as Error).message}).`,
-      );
-    }
-    const result = networkingContactsSchema.safeParse(parsed);
-    if (!result.success) {
-      throw new Error(
-        `Refusing to import data root: restored 'networkingContacts.json' fails schema validation (${result.error.message}).`,
-      );
-    }
-  });
-  await validateRestoredFile(rootPath, 'jobPreferences.yaml', (raw) => {
-    let parsed: unknown;
-    try {
-      parsed = parseYaml(raw);
-    } catch (error) {
-      throw new Error(
-        `Refusing to import data root: restored 'jobPreferences.yaml' is not valid YAML (${(error as Error).message}).`,
-      );
-    }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(
-        `Refusing to import data root: restored 'jobPreferences.yaml' must be a YAML mapping of preference sections.`,
-      );
-    }
   });
 
   // Loud sanctioned-path log: import/export are the single sanctioned

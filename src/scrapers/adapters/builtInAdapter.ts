@@ -1,6 +1,5 @@
-import { HttpStatusError, type RateLimiter } from '../rateLimiter';
-import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
-import { scraperUserAgent } from '../userAgent';
+import { type RateLimiter } from '../rateLimiter';
+import { fetchBoundedText } from '../httpFetcher';
 import { cleanText, decodeHtmlEntities, tokenize, trimText } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
@@ -80,7 +79,6 @@ export const builtInClientSideFilterWarning =
 // blank string, so downstream display and evaluation never see a silent gap.
 export const unknownLocationLabel = 'unknown';
 
-const userAgent = scraperUserAgent;
 const maxKeywordTokens = 5;
 const candidateCap = 60;
 const maxPostingsCount = 12;
@@ -107,12 +105,11 @@ export interface BuiltInSalaryData {
   unitText: string;
 }
 
-// BuiltIn's historical decoder flavor: lowercase-hex only, unclamped code
-// points. Preserved byte-for-byte via options so the shared superset decoder
-// does not change what this source emits.
+// BuiltIn's historical decoder flavor: lowercase-hex only. Invalid code points
+// now degrade to U+FFFD in the shared decoder instead of throwing, so one bad
+// byte costs one posting rather than the whole source.
 const builtInDecodeOptions = {
   allowUppercaseHexPrefix: false,
-  clampInvalidCodePoints: false,
 } as const;
 
 function builtInTokenize(value: string): string[] {
@@ -342,7 +339,8 @@ export function postingToRawPosting(
   }
   const rawLocation = locationFromPosting(posting);
   const location = rawLocation.length > 0 ? rawLocation : unknownLocationLabel;
-  const description = cleanText(trimText(posting.description), builtInDecodeOptions);  const salary = salaryFromPosting(posting);
+  const description = cleanText(trimText(posting.description), builtInDecodeOptions);
+  const salary = salaryFromPosting(posting);
   let rawSalaryText: string | undefined;
   if (salary !== null) {
     const period =
@@ -486,24 +484,6 @@ export class BuiltInAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `BuiltIn request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url);
   }
 }

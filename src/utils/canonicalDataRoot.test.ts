@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applicationsDirectoryName,
@@ -153,6 +153,20 @@ describe('config-driven directory resolution (CLI flag > env > canonical default
       expect(() => resolveTemplatePath('/etc/passwd', dataRoot)).toThrow(/outside|confinement/i);
     } finally {
       await rm(dataRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a relative template reference that escapes the shipped root', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'weJobSearch-tmpl-'));
+    const outsideRoot = await mkdtemp(join(tmpdir(), 'weJobSearch-outside-'));
+    try {
+      const outsideFile = join(outsideRoot, 'escape.typ');
+      await writeFile(outsideFile, 'escape', 'utf8');
+      const relativeEscape = relative(shippedTemplatesRoot(), outsideFile);
+      expect(() => resolveTemplatePath(relativeEscape, dataRoot)).toThrow(/outside|confinement/i);
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true });
+      await rm(outsideRoot, { recursive: true, force: true });
     }
   });
 

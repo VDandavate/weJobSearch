@@ -505,12 +505,17 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
       inputSchema: {
         companyName: z.string().describe('Company name as recorded when the posting was evaluated.'),
         roleTitle: z.string().describe('Role title as recorded when the posting was evaluated.'),
+        postingHash: z
+          .string()
+          .optional()
+          .describe('Optional posting hash to target one record when the company and role match several.'),
       },
     },
     async (args) => {
       const record = await getPostingDetail(args.companyName, args.roleTitle, {
         historyPath: dependencies.historyPath,
         dataRoot: dependencies.dataRoot,
+        postingHash: args.postingHash,
       });
       return {
         content: [
@@ -597,12 +602,17 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
           .string()
           .optional()
           .describe('Optional note (confirmation ref, portal name) stored on the status change.'),
+        postingHash: z
+          .string()
+          .optional()
+          .describe('Optional posting hash to confirm exactly one record when the company and role match several.'),
       },
     },
     async (args) => {
       const outcome = await confirmApplicationSubmission(args.companyName, args.roleTitle, args.notes ?? '', {
         historyPath: dependencies.historyPath,
         dataRoot: dependencies.dataRoot,
+        postingHash: args.postingHash,
       });
       return {
         content: [
@@ -819,12 +829,17 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
         postingRequirements: z
           .string()
           .optional()
-          .describe('Optional comma-separated posting requirements; only those genuinely supported by masterProfile.md are referenced.'),
+          .describe('Optional comma-separated posting requirements; only those genuinely supported by masterProfile.md are referenced. When omitted, the stored posting description is used.'),
+        postingHash: z
+          .string()
+          .optional()
+          .describe('Optional posting hash to target one record when the company and role match several.'),
       },
     },
     async (args) => {
       const draft = await draftCoverLetterForRole(args.companyName, args.roleTitle, args.postingRequirements, {
         dataRoot: dependencies.dataRoot,
+        postingHash: args.postingHash,
       });
       return {
         content: [

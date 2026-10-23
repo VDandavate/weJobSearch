@@ -73,6 +73,32 @@ function normalizeAmountToken(token: string): number {
   return Number(token.replace(/[.,]/g, ''));
 }
 
+// Stray numbers in a salary blurb (bonus percentages, 401(k), years of
+// experience, requisition ids) are not salary bounds. Each is excluded by the
+// context around the token, never by its magnitude alone.
+const idPrefixPattern = /(?:\bid|\breq(?:uisition)?|\bno)\s*[:#]?\s*$/i;
+const hashPrefixPattern = /#\s*$/;
+const percentSuffixPattern = /^\s*(?:%|percent\b)/i;
+const retirementSuffixPattern = /^\s*\(\s*k\s*\)/i;
+const yearsSuffixPattern = /^\s*\+?\s*(?:years?|yrs?)\b/i;
+
+// A yearly figure below this is a reference number, not a salary. The bound
+// only applies after the period is known to be yearly; hourly figures stay
+// untouched.
+const minimumPlausibleYearlyAmount = 1000;
+
+function isStrayNumber(raw: string, tokenStart: number, tokenEnd: number): boolean {
+  const prefix = raw.slice(Math.max(0, tokenStart - 24), tokenStart);
+  const suffix = raw.slice(tokenEnd);
+  return (
+    idPrefixPattern.test(prefix) ||
+    hashPrefixPattern.test(prefix) ||
+    percentSuffixPattern.test(suffix) ||
+    retirementSuffixPattern.test(suffix) ||
+    yearsSuffixPattern.test(suffix)
+  );
+}
+
 function extractAmounts(raw: string): number[] {
   const values: number[] = [];
   const tokenRe = /(\d[\d,.]*)\s*([kK])?/g;
@@ -80,6 +106,9 @@ function extractAmounts(raw: string): number[] {
   while ((match = tokenRe.exec(raw)) !== null) {
     const rawToken = match[1] ?? '';
     if (rawToken.length === 0) {
+      continue;
+    }
+    if (isStrayNumber(raw, match.index, match.index + match[0].length)) {
       continue;
     }
     const value = normalizeAmountToken(rawToken);
@@ -102,7 +131,10 @@ export function parseCompensation(
   if (normalized.length === 0) {
     return null;
   }
-  const amounts = extractAmounts(normalized);
+  const period = detectPeriod(normalized);
+  const amounts = extractAmounts(normalized).filter(
+    (amount) => period !== 'year' || amount >= minimumPlausibleYearlyAmount,
+  );
   if (amounts.length === 0) {
     return null;
   }
@@ -112,7 +144,7 @@ export function parseCompensation(
     currency: detectCurrency(normalized),
     minAmount,
     maxAmount,
-    period: detectPeriod(normalized),
+    period,
   };
 }
 

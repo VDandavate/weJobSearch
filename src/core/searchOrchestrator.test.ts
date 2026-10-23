@@ -1,12 +1,13 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { RawPosting, SourceAdapter } from '../scrapers/jobSpyAdapter';
 import { JobSpyAdapterRegistry } from '../scrapers/jobSpyAdapter';
 import { RateLimiter } from '../scrapers/rateLimiter';
 import { readApplicationHistory } from '../utils/jobFunnelTracker';
 import { addSavedSearch } from '../utils/savedSearches';
+import { writeFileAtomically } from '../utils/atomicWrite';
 import {
   buildProfileQueries,
   evaluateAndPersistPosting,
@@ -19,6 +20,12 @@ import {
   searchJobPostings,
 } from './searchOrchestrator';
 import { confirmApplicationSubmission } from '../cli/jobSearchCore';
+
+// Count atomic writes to the tracker with the real writer still in place.
+vi.mock('../utils/atomicWrite', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/atomicWrite')>();
+  return { ...actual, writeFileAtomically: vi.fn(actual.writeFileAtomically) };
+});
 
 // Phase 7a seam coverage: the pipeline moved verbatim from jobSearchCore.ts.
 // These pin the extracted entry points through the new import path; the full
@@ -173,6 +180,44 @@ describe('runSearchBatch', () => {
       expect(second.servedFromCache).toBe(true);
       const history = await readApplicationHistory(paths.historyPath);
       expect(history.applications).toHaveLength(1);
+    });
+  });
+
+  it('persists a 300-posting batch with one history write and does not fork a within-batch duplicate', async () => {
+    await withSandbox(async (paths) => {
+      const postings: RawPosting[] = [];
+      for (let index = 1; index <= 300; index += 1) {
+        postings.push(
+          posting({
+            companyName: `BatchCorp${index}`,
+            roleTitle: `Staff Engineer ${index}`,
+            jobUrl: `https://alpha.test/jobs/${index}`,
+          }),
+        );
+      }
+      // The same posting seen on a second source: one record, two aggregators.
+      const duplicate: RawPosting = {
+        ...postings[0],
+        sourceAggregator: 'stubBeta',
+        jobUrl: 'https://beta.test/jobs/1',
+      };
+      const registry = makeRegistry([
+        { name: 'stubAlpha', postings },
+        { name: 'stubBeta', postings: [duplicate] },
+      ]);
+      vi.mocked(writeFileAtomically).mockClear();
+      const outcome = await runSearchBatch('staff engineer', 'Remote', { registry });
+      expect(outcome.evaluatedCount).toBe(300);
+      expect(outcome.newRecords).toBe(300);
+      expect(outcome.alreadyRecorded).toBe(0);
+      const historyWrites = vi
+        .mocked(writeFileAtomically)
+        .mock.calls.filter(([targetPath]) => targetPath.endsWith('applicationHistory.json'));
+      expect(historyWrites).toHaveLength(1);
+      const history = await readApplicationHistory(paths.historyPath);
+      expect(history.applications).toHaveLength(300);
+      const merged = history.applications.find((record) => record.companyName === 'BatchCorp1');
+      expect(merged?.sourceAggregators.sort()).toEqual(['stubAlpha', 'stubBeta']);
     });
   });
 });

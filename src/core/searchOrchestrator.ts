@@ -43,10 +43,9 @@ import {
   type SourceSearchResult,
 } from '../scrapers/jobSpyAdapter';
 import {
-  DuplicateApplicationError,
+  appendApplicationHistory,
   computePostingHash,
   generateApplicationId,
-  logApplication,
   markResumeGenerated,
   readApplicationHistory,
   resolveApplicationHistoryPath,
@@ -139,40 +138,15 @@ function buildApplicationRecord(
 // decided by dedup (exact hash or fuzzy title) arrive with a non-null
 // matchedApplicationId and skip the write entirely: the posting is
 // re-evaluated for a fresh assessment, but no second record is created under
-// a different hash. Identity is hash primary (A2): the postingHash read is
-// the primary guard, and logApplication's duplicate error is the backstop
-// against a concurrent same-hash write in a sequential batch.
-// Returns true when the posting was already present (no duplicate written).
-async function persistEvaluationIfNew(
-  record: ApplicationRecord,
-  historyPath: string,
-  rootDir?: string | null,
-): Promise<boolean> {
-  const history = await readApplicationHistory(historyPath, rootDir);
-  if (history.applications.some((existing) => existing.postingHash === record.postingHash)) {
-    return true;
-  }
-  try {
-    await logApplication(record, historyPath, rootDir);
-    return false;
-  } catch (error) {
-    // Phase D: typed idempotency check. The pre-write hash guard above is the
-    // primary signal; the duplicate error is the backstop against a
-    // concurrent same-hash write. Matched by class, never by message
-    // substring, so message rewording cannot silently break this path.
-    if (error instanceof DuplicateApplicationError) {
-      return true;
-    }
-    throw error;
-  }
-}
-
-export async function evaluateAndPersistPosting(
+// a different hash. Identity is hash primary (A2). The whole batch shares one
+// read and one atomic write (audit finding 7) instead of a read-rewrite per
+// posting; appendApplicationHistory's in-batch hash guard is the backstop
+// against the same posting appearing twice in one batch.
+function evaluatePosting(
   posting: RawPosting,
   sourceAggregators: string[],
   context: ResolvedEvaluationContext,
-  matchedApplicationId: string | null,
-): Promise<PersistedEvaluation> {
+): { entry: EvaluatedPosting; record: ApplicationRecord } {
   const requirements = extractPostingRequirements(posting);
   const postingFacts = extractPostingFacts(posting);
   const assessment = evaluateFit({
@@ -185,11 +159,53 @@ export async function evaluateAndPersistPosting(
   const brief = generateBrief(posting.description);
   const entry: EvaluatedPosting = { posting, brief, assessment };
   const record = buildApplicationRecord(posting, sourceAggregators, assessment, postingFacts);
-  if (matchedApplicationId !== null) {
-    return { entry, record, alreadyRecorded: true };
-  }
-  const alreadyRecorded = await persistEvaluationIfNew(record, context.historyPath, context.dataRoot);
-  return { entry, record, alreadyRecorded };
+  return { entry, record };
+}
+
+export interface PendingEvaluation {
+  posting: RawPosting;
+  sourceAggregators: string[];
+  matchedApplicationId: string | null;
+}
+
+// Evaluate every posting in memory, then persist the new records with one
+// batch append. Results keep the input order; alreadyRecorded is true for a
+// history match and for any hash the batch append reported as a duplicate.
+export async function evaluateAndPersistBatch(
+  pending: readonly PendingEvaluation[],
+  context: ResolvedEvaluationContext,
+): Promise<PersistedEvaluation[]> {
+  const evaluated = pending.map((candidateJob) => ({
+    ...evaluatePosting(candidateJob.posting, candidateJob.sourceAggregators, context),
+    matchedApplicationId: candidateJob.matchedApplicationId,
+  }));
+  const toPersist = evaluated
+    .filter((item) => item.matchedApplicationId === null)
+    .map((item) => item.record);
+  const appended =
+    toPersist.length === 0
+      ? { added: [], duplicates: [] }
+      : await appendApplicationHistory(toPersist, context.historyPath, context.dataRoot);
+  const addedHashes = new Set(appended.added.map((record) => record.postingHash));
+  return evaluated.map((item) => ({
+    entry: item.entry,
+    record: item.record,
+    alreadyRecorded:
+      item.matchedApplicationId !== null || !addedHashes.has(item.record.postingHash),
+  }));
+}
+
+export async function evaluateAndPersistPosting(
+  posting: RawPosting,
+  sourceAggregators: string[],
+  context: ResolvedEvaluationContext,
+  matchedApplicationId: string | null,
+): Promise<PersistedEvaluation> {
+  const [result] = await evaluateAndPersistBatch(
+    [{ posting, sourceAggregators, matchedApplicationId }],
+    context,
+  );
+  return result;
 }
 
 export interface SingleEvaluationOutcome {
@@ -213,14 +229,9 @@ export async function evaluateJobPosting(
   if (pending.length === 0) {
     throw new Error(`No posting returned for the given URL; nothing evaluated.`);
   }
-  const result = await evaluateAndPersistPosting(
-    pending[0].posting,
-    pending[0].sourceAggregators,
-    context,
-    pending[0].matchedApplicationId,
-  );
+  const [result] = await evaluateAndPersistBatch(pending, context);
   return {
-    posting: pending[0].posting,
+    posting: result.entry.posting,
     entry: result.entry,
     record: result.record,
     alreadyRecorded: result.alreadyRecorded,
@@ -383,23 +394,10 @@ export async function runSearchBatch(
   }
   const flat = results.flatMap((source) => source.postings);
   const pending = await evaluateBatchToEvaluate(flat, context);
-  const entries: EvaluatedPosting[] = [];
-  let newRecords = 0;
-  let alreadyRecorded = 0;
-  for (const candidateJob of pending) {
-    const evaluated = await evaluateAndPersistPosting(
-      candidateJob.posting,
-      candidateJob.sourceAggregators,
-      context,
-      candidateJob.matchedApplicationId,
-    );
-    entries.push(evaluated.entry);
-    if (evaluated.alreadyRecorded) {
-      alreadyRecorded += 1;
-    } else {
-      newRecords += 1;
-    }
-  }
+  const persisted = await evaluateAndPersistBatch(pending, context);
+  const entries = persisted.map((evaluated) => evaluated.entry);
+  const newRecords = persisted.filter((evaluated) => !evaluated.alreadyRecorded).length;
+  const alreadyRecorded = persisted.length - newRecords;
   const evaluatedCount = entries.length;
 
   // Search history persistence (EUO-13, G7): every completed search is

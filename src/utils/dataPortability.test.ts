@@ -50,7 +50,26 @@ async function seedCanonicalRoot(rootPath: string): Promise<void> {
   await mkdir(join(rootPath, 'applications'), { recursive: true });
   await mkdir(join(rootPath, 'documents'), { recursive: true });
   await writeFile(join(rootPath, 'masterProfile.md'), '# Jane Sample\n\nSenior software engineer.\n', 'utf8');
-  await writeFile(join(rootPath, 'jobPreferences.yaml'), 'compensation:\n  currency: USD\n  minAcceptableBase: 0\n', 'utf8');
+  await writeFile(
+    join(rootPath, 'jobPreferences.yaml'),
+    [
+      'compensation:',
+      '  currency: USD',
+      '  minAcceptableBase: 150000',
+      '  targetBase: 180000',
+      '  countsBonusTowardMin: false',
+      '  countsEquityTowardMin: false',
+      'clearance:',
+      '  currentStatus: none',
+      '  currentLevel: null',
+      '  eligibleToObtain: true',
+      '  requiresSponsorshipForVisa: false',
+      'nonNegotiables: []',
+      'preferredLocations: []',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
   await writeFile(
     join(rootPath, 'screeningAnswers.json'),
     JSON.stringify({ workAuthorization: { usCitizen: false, requiresSponsorship: true } }, null, 2),
@@ -345,6 +364,29 @@ describe('importDataRoot', () => {
       await expect(
         importDataRoot({ archivePath, rootPath: join(restoreDir, 'restored') }),
       ).rejects.toThrow(/fails schema validation/);
+    });
+  });
+
+  it('refuses malformed job preferences before touching the destination', async () => {
+    await withTempDirs(async ([rootDir, backupDir, restoreDir]) => {
+      const sourceRoot = join(rootDir, 'source');
+      await seedCanonicalRoot(sourceRoot);
+      // Valid YAML, invalid preferences schema: the old mapping-only check
+      // accepted this and the failure surfaced on the next command instead.
+      await writeFile(
+        join(sourceRoot, 'jobPreferences.yaml'),
+        'compensation:\n  currency: USD\n  minAcceptableBase: lots\n',
+        'utf8',
+      );
+      const archivePath = join(backupDir, 'bad-preferences.tar.gz');
+      await exportDataRoot({ rootPath: sourceRoot, archivePath });
+
+      const targetRoot = join(restoreDir, 'restored');
+      await expect(importDataRoot({ archivePath, rootPath: targetRoot })).rejects.toThrow(
+        /jobPreferences\.yaml.*schema validation/i,
+      );
+      // The destination was never created: validation runs before extraction.
+      expect(await stat(targetRoot).catch(() => null)).toBeNull();
     });
   });
 

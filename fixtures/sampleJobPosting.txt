@@ -17,7 +17,7 @@ What you will do
 
 Requirements
 ------------
-- 6+ years of experience
+- You must have 6+ years of experience
 - TypeScript
 - Kubernetes
 - AWS

@@ -60,6 +60,7 @@ export interface ParsedCoverLetterArgs {
   company?: string;
   role?: string;
   postingRequirements?: string[];
+  postingHash?: string;
   dataRoot?: string;
   help?: boolean;
 }
@@ -144,6 +145,7 @@ export interface ParsedConfirmAppArgs {
   company?: string;
   role?: string;
   notes?: string;
+  postingHash?: string;
   dataRoot?: string;
   help?: boolean;
 }
@@ -157,6 +159,7 @@ export interface ParsedDigestArgs {
 export interface ParsedShowArgs {
   companyName?: string;
   roleTitle?: string;
+  postingHash?: string;
   dataRoot?: string;
   help?: boolean;
 }
@@ -164,6 +167,7 @@ export interface ParsedShowArgs {
 export interface ParsedReviewArgs {
   companyName?: string;
   roleTitle?: string;
+  postingHash?: string;
   dataRoot?: string;
   help?: boolean;
 }
@@ -173,6 +177,7 @@ export interface ParsedUpdateStatusArgs {
   roleTitle?: string;
   status?: string;
   notes?: string;
+  postingHash?: string;
   dataRoot?: string;
   help?: boolean;
 }
@@ -204,6 +209,7 @@ export function parseCoverLetterArgs(args: readonly string[]): ParsedCoverLetter
         case 'company': parsed.company = value; break;
         case 'role': parsed.role = value; break;
         case 'postingRequirements': postingRequirements.push(value); break;
+        case 'postingHash': parsed.postingHash = value; break;
         case 'dataRoot': parsed.dataRoot = value; break;
         default: break;
       }
@@ -439,6 +445,7 @@ export function parseShowArgs(args: readonly string[]): ParsedShowArgs {
       switch (name) {
         case 'company': parsed.companyName = value; break;
         case 'role': parsed.roleTitle = value; break;
+        case 'postingHash': parsed.postingHash = value; break;
         case 'dataRoot': parsed.dataRoot = value; break;
         default: break;
       }
@@ -455,6 +462,7 @@ export function parseReviewArgs(args: readonly string[]): ParsedReviewArgs {
       switch (name) {
         case 'company': parsed.companyName = value; break;
         case 'role': parsed.roleTitle = value; break;
+        case 'postingHash': parsed.postingHash = value; break;
         case 'dataRoot': parsed.dataRoot = value; break;
         default: break;
       }
@@ -473,6 +481,7 @@ export function parseUpdateStatusArgs(args: readonly string[]): ParsedUpdateStat
         case 'role': parsed.roleTitle = value; break;
         case 'status': parsed.status = value; break;
         case 'notes': parsed.notes = value; break;
+        case 'postingHash': parsed.postingHash = value; break;
         case 'dataRoot': parsed.dataRoot = value; break;
         default: break;
       }
@@ -505,6 +514,7 @@ export function parseConfirmAppArgs(args: readonly string[]): ParsedConfirmAppAr
         case 'company': parsed.company = value; break;
         case 'role': parsed.role = value; break;
         case 'notes': parsed.notes = value; break;
+        case 'postingHash': parsed.postingHash = value; break;
         case 'dataRoot': parsed.dataRoot = value; break;
         default: break;
       }

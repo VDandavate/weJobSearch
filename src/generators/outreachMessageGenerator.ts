@@ -91,7 +91,7 @@ export interface OutreachMessageResult {
 const relationshipLeadTemplates: Record<string, string> = {
   formerColleague: 'As a former colleague at {contactCompany}, ',
   manager: 'As your former manager at {contactCompany}, ',
-  recruiter: 'As a recruiter at {contactCompany}, ',
+  recruiter: "You're a recruiter at {contactCompany}, and ",
   friend: 'As a friend from {contactCompany}, ',
   alumni: 'As an alum of {contactCompany}, ',
 };

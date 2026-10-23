@@ -448,7 +448,7 @@ Use each command's `--help` flag for the exact option set.
 ```bash
 npm run lint          # tsc --noEmit (type-check only)
 npm run build         # tsc (emit to dist/)
-npm test              # vitest run (935 tests across 59 files in this baseline)
+npm test              # vitest run (990 tests across 64 files in this baseline)
 npm run namingLinter  # strict camelCase/PascalCase/zero-underscore scan, no build needed
 npm run setupHooks    # per-clone: git config core.hooksPath .githooks
 ```
@@ -690,14 +690,15 @@ found on multiple boards appears exactly once.
 
 The six sources are free, public, and unauthenticated — no paid API, no paid
 scraping service, no login, no cookies, no credentials, no CAPTCHA solving, no
-bot-detection bypass:
+bot-detection bypass. One of them (hiring.cafe) is currently Cloudflare-blocked
+from some networks; see its row for the visible failure behavior:
 
 | Source | Adapter module | Posture |
 |---|---|---|
 | LinkedIn | `src/scrapers/adapters/linkedinAdapter.ts` | **Accepted risk.** LinkedIn's ToS prohibits automated access; we proceed anyway, deliberately and with your explicit sign-off, using only public unauthenticated search/detail endpoints. Conservative rate limiting. |
-| hiring.cafe | `src/scrapers/adapters/hiringCafeAdapter.ts` | Low-risk free scrape; only public listing pages; robots.txt respected. |
+| hiring.cafe | `src/scrapers/adapters/hiringCafeAdapter.ts` | Low-risk free scrape; only public listing pages; robots.txt respected. **Currently unavailable from networks where Cloudflare returns HTTP 403 on every public path (observed 2026-10 from a residential connection).** The adapter fails visibly as `hiring.cafe is unavailable (...)`, naming the source in the per-source summary, and never attempts to bypass the block. Expect reduced coverage until Cloudflare access is restored. |
 | Wellfound | `src/scrapers/adapters/wellfoundAdapter.ts` | **Accepted risk.** Wellfound's Talent General terms exclude scraping; we use only public unauthenticated `/role/` pages (first page). |
-| Welcome to the Jungle | `src/scrapers/adapters/welcomeToTheJungleAdapter.ts` | **Accepted risk.** WTTJ CGUs prohibit automated extraction. We use robots-allowed sitemaps and server-rendered detail pages only. |
+| Welcome to the Jungle | `src/scrapers/adapters/welcomeToTheJungleAdapter.ts` | **Accepted risk.** WTTJ CGUs prohibit automated extraction. We use robots-allowed sitemaps and server-rendered detail pages only. WTTJ is EU/city-oriented: a remote/work-mode or non-European location returns zero results without fetching, because those terms cannot appear in its city-based job slugs. |
 | Built In | `src/scrapers/adapters/builtInAdapter.ts` | **Accepted risk.** Built In's Community ToU prohibit bots/scraping; we stay on robots-sitemap-listed paths. |
 | FlexJobs | `src/scrapers/adapters/flexJobsAdapter.ts` | **Accepted risk.** FlexJobs' ToS prohibit bots and scraping. This adapter is the most conservative (4-5s delay), stays on the public `/remote-jobs` listing page, and may only expose ~200-character *teaser* cards because full descriptions and applying are paywalled. |
 

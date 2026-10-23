@@ -18,6 +18,21 @@ import type { PostingRequirements } from './fitEvaluator';
 const yearsOfExperiencePattern =
   /(\d{1,2})\s*\+?\s*(?:to\s+\d{1,2}\s*)?years?(?:\s+of)?(?:\s+(?:relevant|professional|hands-on|work))?\s+experience/i;
 
+// A years figure only states a candidate requirement when the sentence
+// addresses the candidate. Employer history ("our team has 20 years") and
+// company marketing must not become a requirement cap.
+const candidateDirectedCuePattern =
+  /\b(?:you|your|candidate|candidates|must|minimum|at\s+least|required|requires?|requirement|requirements)\b/i;
+
+// Preferred cues apply to the sentence or list item that carries them. The
+// governed skills are collected separately and never drive a deduction.
+const preferredCuePattern = /\b(?:preferred|nice\s+to\s+have|bonus|a\s+plus|plus|desired)\b/i;
+
+// A domain term is only a posting requirement when the description ties it to
+// experience or domain language. Vendor marketing that merely names its
+// market ("we are a cybersecurity leader") carries no such cue.
+const domainCuePattern = /\bexperience\s+in\b|\bbackground\s+in\b|\bdomain\b/i;
+
 interface VocabularyEntry {
   canonical: string;
   patterns: RegExp[];
@@ -103,21 +118,98 @@ function matchesCanonicalEntries(entries: VocabularyEntry[], text: string): stri
   return found;
 }
 
-export function detectYearsOfExperience(text: string): number | null {
-  const match = yearsOfExperiencePattern.exec(text);
-  if (match === null) {
-    return null;
-  }
-  const value = Number(match[1]);
-  return Number.isFinite(value) ? value : null;
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
 }
 
-function extractRequiredYearsOfExperience(description: string): number | null {
-  return detectYearsOfExperience(description);
+export function detectYearsOfExperience(text: string): number | null {
+  for (const sentence of splitSentences(text)) {
+    if (!candidateDirectedCuePattern.test(sentence)) {
+      continue;
+    }
+    const match = yearsOfExperiencePattern.exec(sentence);
+    if (match === null) {
+      continue;
+    }
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+interface SkillSegment {
+  text: string;
+  preferred: boolean;
+}
+
+function skillSegments(description: string): SkillSegment[] {
+  const segments: SkillSegment[] = [];
+  for (const paragraph of description.split(/\n\s*\n/)) {
+    let inheritedCue = false;
+    for (const line of paragraph.split('\n')) {
+      const sentences = splitSentences(line);
+      const lineHasSkill = sentences.some(
+        (sentence) => matchesCanonicalEntries(skillVocabulary, sentence).length > 0,
+      );
+      const lineHasCue = sentences.some((sentence) => preferredCuePattern.test(sentence));
+      for (const sentence of sentences) {
+        segments.push({
+          text: sentence,
+          preferred: inheritedCue || preferredCuePattern.test(sentence),
+        });
+      }
+      // A cue-only heading ("Preferred qualifications:") governs the list
+      // items below it inside the same paragraph; a later plain heading ends
+      // that scope.
+      if (lineHasCue && !lineHasSkill) {
+        inheritedCue = true;
+      } else if (!lineHasCue && !lineHasSkill && /:\s*$/.test(line)) {
+        inheritedCue = false;
+      }
+    }
+  }
+  return segments;
+}
+
+function classifySkills(
+  description: string,
+  roleTitle: string,
+): { required: string[]; preferred: string[] } {
+  const titleSkills = matchesCanonicalEntries(skillVocabulary, roleTitle);
+  const segments = skillSegments(description);
+  const required: string[] = [];
+  const preferred: string[] = [];
+  for (const entry of skillVocabulary) {
+    const inTitle = titleSkills.includes(entry.canonical);
+    const inRequiredSegment = segments.some(
+      (segment) =>
+        !segment.preferred && entry.patterns.some((pattern) => pattern.test(segment.text)),
+    );
+    if (inTitle || inRequiredSegment) {
+      required.push(entry.canonical);
+    } else if (
+      segments.some(
+        (segment) =>
+          segment.preferred && entry.patterns.some((pattern) => pattern.test(segment.text)),
+      )
+    ) {
+      preferred.push(entry.canonical);
+    }
+  }
+  return { required, preferred };
 }
 
 export function extractRequiredSkills(description: string, roleTitle: string): string[] {
-  return matchesCanonicalEntries(skillVocabulary, `${roleTitle} ${description}`);
+  return classifySkills(description, roleTitle).required;
+}
+
+export function extractPreferredSkills(description: string): string[] {
+  return classifySkills(description, '').preferred;
 }
 
 // Shared with profileCapabilitiesExtractor so candidate domains and posting
@@ -126,11 +218,27 @@ export function detectDomains(text: string): string[] {
   return matchesCanonicalEntries(domainVocabulary, text);
 }
 
+export function detectPostingDomains(description: string): string[] {
+  const found = new Set<string>();
+  for (const sentence of splitSentences(description)) {
+    if (!domainCuePattern.test(sentence)) {
+      continue;
+    }
+    for (const domain of matchesCanonicalEntries(domainVocabulary, sentence)) {
+      found.add(domain);
+    }
+  }
+  return domainVocabulary
+    .map((entry) => entry.canonical)
+    .filter((domain) => found.has(domain));
+}
+
 export function extractPostingRequirements(posting: RawPosting): PostingRequirements {
-  const searchableText = `${posting.companyName} ${posting.roleTitle} ${posting.description}`;
+  const skills = classifySkills(posting.description, posting.roleTitle);
   return {
-    requiredSkills: extractRequiredSkills(posting.description, posting.roleTitle),
-    requiredYearsOfExperience: extractRequiredYearsOfExperience(posting.description),
-    requiredDomains: detectDomains(searchableText),
+    requiredSkills: skills.required,
+    preferredSkills: skills.preferred,
+    requiredYearsOfExperience: detectYearsOfExperience(posting.description),
+    requiredDomains: detectPostingDomains(posting.description),
   };
 }

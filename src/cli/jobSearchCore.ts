@@ -56,6 +56,8 @@ import {
   reviewQueueToMarkdown,
 } from '../reporting/reviewQueueFormatter';
 import { loadJobPreferences, parseJobPreferences } from '../evaluators/fitEvaluator';
+import { extractPostingRequirements } from '../evaluators/postingRequirementsExtractor';
+import type { RawPosting } from '../scrapers/jobSpyAdapter';
 import { candidateCapabilitiesFromProfile } from '../evaluators/profileCapabilitiesExtractor';
 import { suggestRoles } from '../evaluators/roleSuggester';
 import { analyzeApplicationPatterns, type PatternSuggestion } from '../reporting/patternAnalyzer';
@@ -341,23 +343,112 @@ export async function runPreviewResumeCommand(args: ParsedPreviewResumeArgs): Pr
   }
 }
 
+interface ResolvedCoverLetterRequirements {
+  requirements?: string[];
+  source: 'explicit' | 'stored' | 'profileOnly';
+}
+
+function storedPostingRequirements(record: ApplicationRecord): string[] | undefined {
+  const description = record.postingDescription?.trim() ?? '';
+  if (description.length === 0) {
+    return undefined;
+  }
+  const storedPosting: RawPosting = {
+    sourceAggregator: record.sourceAggregators[0] ?? 'stored',
+    companyName: record.companyName,
+    roleTitle: record.roleTitle,
+    location: '',
+    jobUrl: record.jobUrl,
+    description,
+    hasFullDescription: true,
+    postedAt: null,
+  };
+  const extracted = extractPostingRequirements(storedPosting);
+  const requirements = [
+    ...extracted.requiredSkills,
+    ...extracted.requiredDomains,
+    ...(extracted.requiredYearsOfExperience === null
+      ? []
+      : [`${extracted.requiredYearsOfExperience} years of experience`]),
+  ];
+  return [...new Set(requirements)];
+}
+
+// Findings 23/24: with no explicit requirements, read the stored posting for
+// the matching record and run the deterministic extractor on it. Several
+// matching records without a hash is an error, never a guess.
+async function resolveCoverLetterRequirements(
+  companyName: string,
+  roleTitle: string,
+  explicitRequirements: readonly string[] | undefined,
+  postingHash: string | undefined,
+  dataRoot: string | undefined,
+): Promise<ResolvedCoverLetterRequirements> {
+  if (explicitRequirements !== undefined && explicitRequirements.length > 0) {
+    return { requirements: [...explicitRequirements], source: 'explicit' };
+  }
+  const historyPath = resolveApplicationHistoryPath(undefined, dataRoot);
+  const history = await readApplicationHistory(historyPath, dataRoot);
+  const applicationId = generateApplicationId(companyName, roleTitle);
+  const matches = history.applications.filter(
+    (application) => application.applicationId === applicationId,
+  );
+  if (postingHash !== undefined) {
+    const exact = matches.find((application) => application.postingHash === postingHash);
+    if (exact === undefined) {
+      throw new Error(
+        `No application record found with id ${applicationId} and postingHash ${postingHash}.`,
+      );
+    }
+    return { requirements: storedPostingRequirements(exact), source: 'stored' };
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      [
+        ...describeApplicationMatches(applicationId, matches),
+        'No cover letter was written because the posting cannot be chosen without a hash.',
+      ].join('\n'),
+    );
+  }
+  if (matches.length === 0) {
+    return { source: 'profileOnly' };
+  }
+  const requirements = storedPostingRequirements(matches[0]);
+  return requirements === undefined
+    ? { source: 'profileOnly' }
+    : { requirements, source: 'stored' };
+}
+
 export async function runDraftCoverLetter(args: ParsedCoverLetterArgs): Promise<CliDispatchResult> {
   const company = args.company ?? '';
   const role = args.role ?? '';
   try {
+    const resolved = await resolveCoverLetterRequirements(
+      company,
+      role,
+      args.postingRequirements,
+      args.postingHash,
+      args.dataRoot,
+    );
     const result = await draftCoverLetter({
       companyName: company,
       roleTitle: role,
-      postingRequirements: args.postingRequirements,
+      postingRequirements: resolved.requirements,
       dataRoot: args.dataRoot,
     });
     const excluded = result.excludedTokens.length > 0 ? result.excludedTokens : ['none'];
+    const referenced =
+      resolved.source === 'profileOnly'
+        ? '(none - profile grounded only)'
+        : result.claimableTokens.length > 0
+          ? result.claimableTokens.join(', ')
+          : '(none claimable from the stored posting)';
     return {
       exitCode: 0,
       printedLines: [
         `Cover letter drafted for ${company} / ${role}.`,
         `Markdown: ${result.markdownPath}`,
-        `Posting requirements referenced: ${result.claimableTokens.length > 0 ? result.claimableTokens.join(', ') : '(none - profile grounded only)'}`,
+        `Posting requirements referenced: ${referenced}`,
         `Posting requirements held back (not in masterProfile.md): ${excluded.join(', ')}`,
       ],
     };
@@ -663,27 +754,71 @@ export async function runDigestCommand(args: ParsedDigestArgs): Promise<CliDispa
   return { exitCode: 0, printedLines: lines };
 }
 
+// Identity targeting (findings 20-22): applicationId stays the human-readable
+// id and one id can map to several records (the same role in different cities).
+// Every command that targets one record resolves it through this helper, so an
+// id shared by several records is listed, never silently reduced to the first.
+function describeApplicationMatches(
+  applicationId: string,
+  matches: readonly ApplicationRecord[],
+): string[] {
+  return [
+    `Application id ${applicationId} matches ${matches.length} records (the same company and role in different locations).`,
+    'Retry with the postingHash of the target record (CLI: --postingHash):',
+    ...matches.map(
+      (record) =>
+        `  postingHash ${record.postingHash} | location ${record.postingFacts?.locationType ?? 'unknown'} | status ${record.status} | fit ${record.fitScore}`,
+    ),
+  ];
+}
+
+function selectApplicationRecord(
+  applications: readonly ApplicationRecord[],
+  applicationId: string,
+  postingHash: string | undefined,
+): ApplicationRecord {
+  const matches = applications.filter(
+    (application) => application.applicationId === applicationId,
+  );
+  if (postingHash !== undefined) {
+    const exact = matches.find((application) => application.postingHash === postingHash);
+    if (exact === undefined) {
+      throw new Error(
+        `No application record found with id ${applicationId} and postingHash ${postingHash}.`,
+      );
+    }
+    return exact;
+  }
+  if (matches.length > 1) {
+    throw new Error(describeApplicationMatches(applicationId, matches).join('\n'));
+  }
+  if (matches.length === 0) {
+    throw new Error(`No application record found for id ${applicationId}.`);
+  }
+  return matches[0];
+}
+
 // Shared by the show CLI command and the getPostingDetail MCP tool (SRA-02):
 // returns the stored application record for one company/role, or throws with a
 // readable message when the posting was never evaluated. Read-only.
 export async function getPostingDetail(
   companyName: string,
   roleTitle: string,
-  options: { historyPath?: string; dataRoot?: string } = {},
+  options: { historyPath?: string; dataRoot?: string; postingHash?: string } = {},
 ): Promise<ApplicationRecord> {
   const historyPath = options.historyPath ?? resolveApplicationHistoryPath(undefined, options.dataRoot);
   const history = await readApplicationHistory(historyPath, options.dataRoot);
   const applicationId = generateApplicationId(companyName, roleTitle);
-  const record = history.applications.find(
+  const matches = history.applications.filter(
     (application) => application.applicationId === applicationId,
   );
-  if (record === undefined) {
+  if (matches.length === 0) {
     throw new Error(
       `No application record found for '${companyName}' / '${roleTitle}' (id ${applicationId}) in the canonical data root. ` +
         'Run evaluate or search first so the posting is logged before reviewing.',
     );
   }
-  return record;
+  return selectApplicationRecord(matches, applicationId, options.postingHash);
 }
 
 function renderPostingDetail(record: ApplicationRecord): string[] {
@@ -737,7 +872,10 @@ export async function runShowCommand(args: ParsedShowArgs): Promise<CliDispatchR
     };
   }
   try {
-    const record = await getPostingDetail(company, role, { dataRoot: args.dataRoot });
+    const record = await getPostingDetail(company, role, {
+      dataRoot: args.dataRoot,
+      postingHash: args.postingHash,
+    });
     return { exitCode: 0, printedLines: renderPostingDetail(record) };
   } catch (error) {
     return { exitCode: 1, printedLines: [(error as Error).message] };
@@ -764,10 +902,10 @@ export async function runReviewCommand(
     return exitOneWithMessage(error);
   }
   const applicationId = generateApplicationId(company, role);
-  const record = history.applications.find(
+  const matches = history.applications.filter(
     (application) => application.applicationId === applicationId,
   );
-  if (record === undefined) {
+  if (matches.length === 0) {
     return {
       exitCode: 1,
       printedLines: [
@@ -775,6 +913,12 @@ export async function runReviewCommand(
         'Run evaluate or search first so the posting is logged before reviewing.',
       ],
     };
+  }
+  let record: ApplicationRecord;
+  try {
+    record = selectApplicationRecord(matches, applicationId, args.postingHash);
+  } catch (error) {
+    return { exitCode: 1, printedLines: (error as Error).message.split('\n') };
   }
   const prompt = options.prompt ?? createCliPromptContext();
   const detailLines = renderPostingDetail(record);
@@ -803,6 +947,7 @@ export async function runReviewCommand(
       const result = await runDraftCoverLetter({
       company,
       role,
+      postingHash: args.postingHash,
       dataRoot,
     });
       return { exitCode: result.exitCode, printedLines: [...detailLines, '', ...result.printedLines] };
@@ -826,7 +971,11 @@ export async function runReviewCommand(
     case 'a': {
       const notes = (await prompt.ask('Confirmation note (optional): ')).trim();
       try {
-        const outcome = await confirmApplicationSubmission(company, role, notes, { historyPath, dataRoot });
+        const outcome = await confirmApplicationSubmission(company, role, notes, {
+          historyPath,
+          dataRoot,
+          postingHash: args.postingHash,
+        });
         const note = outcome.alreadyConfirmed ? 'was already confirmed' : 'confirmed';
         return {
           exitCode: 0,
@@ -890,10 +1039,14 @@ export async function runUpdateStatusCommand(args: ParsedUpdateStatusArgs): Prom
     return exitOneWithMessage(error);
   }
   const applicationId = generateApplicationId(company, role);
-  const record = history.applications.find(
-    (application) => application.applicationId === applicationId,
-  );
-  if (record === undefined) {
+  let record: ApplicationRecord;
+  try {
+    record = selectApplicationRecord(history.applications, applicationId, args.postingHash);
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.startsWith('Application id ')) {
+      return { exitCode: 1, printedLines: message.split('\n') };
+    }
     return {
       exitCode: 1,
       printedLines: [
@@ -910,6 +1063,7 @@ export async function runUpdateStatusCommand(args: ParsedUpdateStatusArgs): Prom
       args.notes,
       historyPath,
       args.dataRoot,
+      record.postingHash,
     );
   } catch (error) {
     return exitOneWithMessage(error);
@@ -1321,18 +1475,25 @@ export async function draftCoverLetterForRole(
   companyName: string,
   roleTitle: string,
   postingRequirements?: string,
-  options: { dataRoot?: string } = {},
+  options: { dataRoot?: string; postingHash?: string } = {},
 ): Promise<CoverLetterSummary> {
-  const requirements = postingRequirements
+  const explicit = postingRequirements
     ? postingRequirements
         .split(',')
         .map((requirement) => requirement.trim())
         .filter((requirement) => requirement.length > 0)
     : undefined;
+  const resolved = await resolveCoverLetterRequirements(
+    companyName,
+    roleTitle,
+    explicit,
+    options.postingHash,
+    options.dataRoot,
+  );
   const result = await draftCoverLetter({
     companyName,
     roleTitle,
-    postingRequirements: requirements,
+    postingRequirements: resolved.requirements,
     dataRoot: options.dataRoot,
   });
   return {
@@ -1357,16 +1518,15 @@ export async function confirmApplicationSubmission(
   companyName: string,
   roleTitle: string,
   notes: string,
-  options: { historyPath?: string; dataRoot?: string } = {},
+  options: { historyPath?: string; dataRoot?: string; postingHash?: string } = {},
 ): Promise<ApplicationConfirmationOutcome> {
   const historyPath = options.historyPath ?? resolveApplicationHistoryPath(undefined, options.dataRoot);
   const history = await readApplicationHistory(historyPath, options.dataRoot);
   const applicationId = generateApplicationId(companyName, roleTitle);
-  // A2: the same company and role can legitimately have one record per city
-  // (same applicationId, distinct postingHash), so the confirm target is the
-  // full matching set, never a silent first-match pick. Each record is updated
-  // through its unambiguous (id, postingHash) target; the per-record
-  // forward-only gate below still applies to every one of them.
+  // Findings 20-22: one id can map to several records (the same company and
+  // role in different cities). A hash confirms exactly one; without a hash a
+  // single pending record keeps the one-step behavior, and several pending
+  // records require an explicit hash instead of confirming the whole set.
   const matches = history.applications.filter(
     (application) => application.applicationId === applicationId,
   );
@@ -1376,29 +1536,49 @@ export async function confirmApplicationSubmission(
         'Run evaluate or search first so the posting is logged before confirming.',
     );
   }
-  const blocked = matches.find(
-    (record) => record.status !== 'evaluated' && record.status !== 'generated' && record.status !== 'appliedConfirmed',
-  );
-  if (blocked !== undefined) {
+  let target: ApplicationRecord;
+  if (options.postingHash !== undefined) {
+    const exact = matches.find(
+      (application) => application.postingHash === options.postingHash,
+    );
+    if (exact === undefined) {
+      throw new Error(
+        `No application record found with id ${applicationId} and postingHash ${options.postingHash}.`,
+      );
+    }
+    target = exact;
+  } else {
+    const pending = matches.filter((record) => record.status !== 'appliedConfirmed');
+    if (pending.length > 1) {
+      throw new Error(
+        [
+          ...describeApplicationMatches(applicationId, matches),
+          'Confirmation needs the postingHash of the record you submitted; nothing was confirmed.',
+        ].join('\n'),
+      );
+    }
+    target = pending[0] ?? matches[0];
+  }
+  if (
+    target.status !== 'evaluated' &&
+    target.status !== 'generated' &&
+    target.status !== 'appliedConfirmed'
+  ) {
     throw new Error(
-      `Application ${applicationId} is '${blocked.status}'; only evaluated or generated applications can be confirmed as submitted.`,
+      `Application ${applicationId} is '${target.status}'; only evaluated or generated applications can be confirmed as submitted.`,
     );
   }
-  const pending = matches.filter((record) => record.status !== 'appliedConfirmed');
-  if (pending.length === 0) {
-    return { record: matches[0], alreadyConfirmed: true };
+  if (target.status === 'appliedConfirmed') {
+    return { record: target, alreadyConfirmed: true };
   }
-  let confirmed = pending[0];
-  for (const record of pending) {
-    confirmed = await updateApplicationStatus(
-      applicationId,
-      'appliedConfirmed',
-      notes,
-      historyPath,
-      options.dataRoot,
-      record.postingHash,
-    );
-  }
+  const confirmed = await updateApplicationStatus(
+    applicationId,
+    'appliedConfirmed',
+    notes,
+    historyPath,
+    options.dataRoot,
+    target.postingHash,
+  );
   return { record: confirmed, alreadyConfirmed: false };
 }
 
@@ -1459,6 +1639,7 @@ export async function runConfirmAppCommand(args: ParsedConfirmAppArgs): Promise<
   try {
     const outcome = await confirmApplicationSubmission(company, role, args.notes ?? '', {
       dataRoot: args.dataRoot,
+      postingHash: args.postingHash,
     });
     const note = outcome.alreadyConfirmed ? 'was already confirmed' : 'confirmed';
     return {

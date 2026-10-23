@@ -15,17 +15,21 @@ export interface DecodeHtmlEntitiesOptions {
   // Accept an uppercase hexadecimal marker (&#X41;) alongside &#x41;.
   // Default true (LinkedIn); BuiltIn matched lowercase x only.
   allowUppercaseHexPrefix?: boolean;
-  // Map out-of-range code points to '' instead of throwing. Default true
-  // (LinkedIn's guarded conversion); BuiltIn passed the raw value straight to
-  // String.fromCodePoint, which throws on invalid input.
+  // Retained for call-site compatibility. Invalid numeric code points now
+  // always degrade to U+FFFD instead of throwing: one bad byte must cost one
+  // posting, never an entire source (audit finding 13).
   clampInvalidCodePoints?: boolean;
 }
 
-function numericEntity(codePoint: number, clamp: boolean): string {
-  if (clamp) {
-    return codePoint >= 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '';
-  }
-  return String.fromCodePoint(codePoint);
+const replacementCharacter = '\uFFFD';
+
+function numericEntity(codePoint: number): string {
+  const isScalarValue =
+    Number.isInteger(codePoint) &&
+    codePoint >= 0 &&
+    codePoint <= 0x10ffff &&
+    !(codePoint >= 0xd800 && codePoint <= 0xdfff);
+  return isScalarValue ? String.fromCodePoint(codePoint) : replacementCharacter;
 }
 
 // Full HTML-entity decode: the five named entities plus, unless disabled,
@@ -34,7 +38,6 @@ function numericEntity(codePoint: number, clamp: boolean): string {
 // exactly (named entities, then numeric references, then nbsp).
 export function decodeHtmlEntities(text: string, options: DecodeHtmlEntitiesOptions = {}): string {
   const decodeNumeric = options.decodeNumericReferences !== false;
-  const clamp = options.clampInvalidCodePoints !== false;
   let decoded = text
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -46,8 +49,8 @@ export function decodeHtmlEntities(text: string, options: DecodeHtmlEntitiesOpti
     const hexPattern =
       options.allowUppercaseHexPrefix === false ? /&#x([0-9a-fA-F]+);/g : /&#[xX]([0-9a-fA-F]+);/g;
     decoded = decoded
-      .replace(/&#(\d+);/g, (match, decimal: string) => numericEntity(parseInt(decimal, 10), clamp))
-      .replace(hexPattern, (match, hex: string) => numericEntity(parseInt(hex, 16), clamp));
+      .replace(/&#(\d+);/g, (match, decimal: string) => numericEntity(parseInt(decimal, 10)))
+      .replace(hexPattern, (match, hex: string) => numericEntity(parseInt(hex, 16)));
   }
   return decoded.replace(/&nbsp;/g, ' ');
 }
@@ -105,6 +108,51 @@ export function tokenize(value: string, options: TokenizeOptions = {}): string[]
     .filter((token) => token.length >= minLength);
   const capped = options.maxTokens !== undefined ? tokens.slice(0, options.maxTokens) : tokens;
   return options.dedupe === false ? capped : [...new Set(capped)];
+}
+
+export type LocationWorkMode = 'remote' | 'hybrid' | 'onsite';
+
+// A request such as 'Remote' or 'Hybrid, East Coast US' names a work mode, not
+// a city. Shared by the adapters that post-filter on the posting's own location.
+export function locationWorkMode(requested: string): LocationWorkMode | null {
+  const normalized = requested.toLowerCase();
+  if (/\bremote\b/.test(normalized)) {
+    return 'remote';
+  }
+  if (/\bhybrid\b/.test(normalized)) {
+    return 'hybrid';
+  }
+  if (/\bon[\s-]?site\b/.test(normalized)) {
+    return 'onsite';
+  }
+  return null;
+}
+
+// A posting matches when its own location label satisfies the request. An
+// empty or 'unknown' label never matches a specific place, so an unlocatable
+// posting is not presented as a city result.
+export function postingMatchesLocation(postingLocation: string, requestedLocation: string): boolean {
+  const requested = requestedLocation.trim();
+  if (requested.length === 0) {
+    return true;
+  }
+  const label = postingLocation.trim().toLowerCase();
+  if (label.length === 0 || label === 'unknown') {
+    return false;
+  }
+  const mode = locationWorkMode(requested);
+  if (mode === 'remote') {
+    return /\bremote\b/.test(label);
+  }
+  if (mode === 'hybrid') {
+    return /\bhybrid\b/.test(label);
+  }
+  if (mode === 'onsite') {
+    return !/\b(remote|hybrid)\b/.test(label);
+  }
+  const labelTokens = new Set(tokenize(label));
+  const requestedTokens = tokenize(requested);
+  return requestedTokens.length > 0 && requestedTokens.every((token) => labelTokens.has(token));
 }
 
 export interface NextDataScriptOptions {
