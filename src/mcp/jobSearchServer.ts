@@ -98,7 +98,7 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
     'ingestDocuments',
     {
       description:
-        'Scan a directory for supported source documents (PDF via pdfParser, Markdown .md and plain-text .txt via the text reader), parse each one read-only, and return a structured per-file summary (file name, relative path, type, byte size, page count for PDFs or character count for text, and cleaned extracted text). Never writes or modifies any file; hidden files (dot-prefixed), unsupported extensions, and subdirectories are skipped silently. An empty directory returns an empty result.',
+        'Scan a directory for supported source documents (PDF via pdfParser, Markdown .md and plain-text .txt via the text reader), parse each one read-only, and return a structured per-file summary (file name, relative path, type, byte size, page count for PDFs or character count for text, and cleaned extracted text). Never writes or modifies any file; hidden files (dot-prefixed), unsupported extensions, and subdirectories are skipped silently. An empty or not-yet-created directory returns an empty result.',
       inputSchema: {
         dirPath: z.string().describe('Absolute path to the directory to scan for documents.'),
       },

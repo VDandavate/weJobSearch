@@ -1,9 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applicationsDirectoryName,
+  assertConfinedToRoot,
   canonicalContactsPath,
   canonicalDataRoot,
   canonicalMasterProfilePath,
@@ -13,6 +14,7 @@ import {
   isPathInside,
   platformDocumentsDirectory,
   profileDirectoryOf,
+  redactHomePrefix,
   resolveDataRoot,
   resolveOutputRoot,
   resolveResumeVariantsPath,
@@ -257,6 +259,36 @@ describe('tilde expansion (U43)', () => {
     expect(resolveDataRoot('~/wejs-data')).toBe(join(homedir(), 'wejs-data'));
     process.env[envKey] = '~/wejs-env';
     expect(resolveDataRoot()).toBe(join(homedir(), 'wejs-env'));
+  });
+});
+
+describe('H1a confinement: document-ingestion staging guidance (issue 06)', () => {
+  const dataRoot = join(homedir(), 'Documents', 'weJobSearch', 'tester');
+
+  it('tells ingestDocuments callers to copy into documents/ with redacted paths', () => {
+    const outsideFile = join(homedir(), 'Downloads', 'resume.pdf');
+    let message = '';
+    try {
+      assertConfinedToRoot(dataRoot, outsideFile, 'ingestDocuments');
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/copy the files into .*documents.* and retry/i);
+    expect(message).toContain(redactHomePrefix(join(dataRoot, documentsDirectoryName)));
+    expect(message).not.toContain(homedir());
+  });
+
+  it('does not add the staging instruction for non-ingestion labels', () => {
+    const outsideFile = join(homedir(), 'Downloads', 'resume.pdf');
+    let message = '';
+    try {
+      assertConfinedToRoot(dataRoot, outsideFile, 'parsePdfDocument');
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/H1a confinement violation/);
+    expect(message).not.toMatch(/copy the files into/i);
+    expect(message).not.toContain(homedir());
   });
 });
 

@@ -17,7 +17,9 @@ import { assertConfinedToRoot, redactHomePrefix, resolveDataRoot } from './canon
 //     network access.
 //   - Silent skipping: hidden files (dot-prefixed), unsupported extensions,
 //     and subdirectories are ignored without error. An empty directory yields
-//     an empty result; a missing directory throws an error naming the path.
+//     an empty result; a not-yet-created directory gets the same empty result
+//     plus a friendly note (never a raw ENOENT), while other scan failures
+//     still surface as errors.
 //   - Strict camelCase throughout: no underscores in any identifier or key.
 //
 // Ownership (Phase 5c): consumed by the ingestDocuments MCP tool path in
@@ -65,6 +67,15 @@ export async function ingestDocuments(dirPath: string, rootDir?: string | null):
   try {
     names = await readdir(resolvedDir);
   } catch (error) {
+    // A missing directory is the guaranteed first-run state: nothing creates
+    // it until files are staged. Treat it like an empty directory instead of
+    // surfacing a raw ENOENT the user has to decode.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      console.warn(
+        `ingestDocuments: documents directory ${redactHomePrefix(resolvedDir)} does not exist yet; nothing to ingest.`,
+      );
+      return [];
+    }
     throw new Error(`Unable to read documents directory ${redactHomePrefix(resolvedDir)}: ${(error as Error).message}`);
   }
 

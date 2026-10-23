@@ -373,3 +373,10 @@ describe('docsContract', () => {
     // The phrase "never auto-runs a search" is consistent with the setup command
     expect(readme).not.toContain('automatically run');
   });
+
+  it('committed setup command carries the plain-language data-root, staging, and closing wording', () => {
+    const setup = readFileSync(join(repoRootOf(), '.claude', 'commands', 'setup.md'), 'utf8').replace(/\s+/g, ' ');
+    expect(setup).toContain('chosen automatically from your system account');
+    expect(setup).toContain('Before staging anything');
+    expect(setup).toContain('nothing chains automatically');
+  });
