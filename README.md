@@ -397,76 +397,8 @@ Then register/host the MCP server for your agent host:
   `AGENTS.md`): these are already present and point the agent at the SDD and the
   tool layer.
 
-## First-run setup (agent-driven)
-
-The normal user experience is agent-driven: open this repo in an MCP-capable
-host (Claude Code, Cursor, OpenCode, etc.) and the agent will walk you through
-setup using the generated `setup` command. The flow is:
-
-1. **Inspect** — the agent calls `getUserProfile` and shows the resolved data
-   root and which profile files exist.
-2. **Documents** — you point the agent at folders with resumes; it calls
-   `ingestDocuments` to parse them and propose a profile.
-3. **Profile draft** — the agent proposes `masterProfile.md` sections (contact,
-   work authorization, summary, skills, experience, education, certifications);
-   you review and correct each section. LinkedIn and portfolio may be left
-   empty.
-4. **Target roles** — you provide the role titles to search for.
-5. **Locations** — you provide preferred locations as free text (Remote, Hybrid
-   East Coast US, a city, or a ZIP code). If you name a metro, the agent offers
-   an optional radius in miles.
-6. **Clearance, compensation, work authorization** — the agent asks for
-   clearance status/level, eligibility, sponsorship needs, and compensation
-   floor/target with bonus/equity treatment.
-7. **Non-negotiables** — the agent proposes reject-intent rules
-   (`noRelocation`, `noStaffingAgencies`, `clearanceMismatch`,
-   `belowMinSalary`) and a manual-review rule (`remoteOnly`) only if
-   `noRelocation` is declined.
-8. **Screening answers** — derived from earlier answers; only notice period,
-   per-skill years, and sponsorship type (when required) are asked.
-9. **Preview and confirm** — the agent shows every file that will be written
-   with diffs for existing files. **Nothing is written before you confirm.**
-   On confirmation, `initializeUserProfile` (first run) or `updateUserProfile`
-   (re-run) is called with `confirmed: true`.
-10. **Health check** — `npm run setup` runs; Node and config errors stop the
-    flow, missing Typst is a warning only.
-11. **First search** — the agent **offers** a search and waits for your
-    explicit yes. On yes, it calls `searchByProfile` (if target roles exist) or
-    `searchJobPostings` (with your keywords). No filters unless you ask.
-    After results, it offers to save the search (default: no).
-12. **Stop** — the agent prints next steps and the command menu. It does not
-    generate a resume, cover letter, or outreach message, and does not confirm
-    an application.
-
-The data map shown to you:
-
-| Path | Contents |
-|---|---|
-| `masterProfile.md` | Ground-truth profile used by every generator |
-| `jobPreferences.yaml` | Compensation, clearance, non-negotiables, locations, target roles, radius |
-| `screeningAnswers.json` | Portal screening answers |
-| `networkingContacts.json` | Contacts and referrals |
-| `resumeVariants.yaml` | Variant to template mapping |
-| `savedSearches.json` / `searchHistory.json` | Search records |
-| `applications/applicationHistory.json` | Application tracking |
-| `documents/` | Source documents |
-| `previews/` and `templates/` | Rendered previews and custom templates |
-
-**Radius limitation:** the optional search radius (miles) is honored **only by
-LinkedIn**. The other five sources do not support it and surface a disclosure
-note in per-source results:
-
-| Source | Radius support |
-|---|---|
-| LinkedIn | `distance=` parameter sent |
-| hiring.cafe | Path slugs only; no radius parameter |
-| Wellfound | No radius parameter in API |
-| Welcome to the Jungle | Sitemap-based; no radius parameter |
-| Built In | Allowed listing has no radius parameter |
-| FlexJobs | Ignores query parameters |
-
-`npm run setupHooks` and the interactive `init` wizard are developer
-conveniences, not part of the user bootstrap.
+That is the entire setup. `npm run setupHooks` and the interactive `init`
+wizard are developer conveniences, not part of the user bootstrap.
 
 ## Optional developer interface
 
@@ -516,7 +448,7 @@ Use each command's `--help` flag for the exact option set.
 ```bash
 npm run lint          # tsc --noEmit (type-check only)
 npm run build         # tsc (emit to dist/)
-npm test              # vitest run (958 tests across 59 files in this baseline)
+npm test              # vitest run (990 tests across 64 files in this baseline)
 npm run namingLinter  # strict camelCase/PascalCase/zero-underscore scan, no build needed
 npm run setupHooks    # per-clone: git config core.hooksPath .githooks
 ```
@@ -758,14 +690,15 @@ found on multiple boards appears exactly once.
 
 The six sources are free, public, and unauthenticated — no paid API, no paid
 scraping service, no login, no cookies, no credentials, no CAPTCHA solving, no
-bot-detection bypass:
+bot-detection bypass. One of them (hiring.cafe) is currently Cloudflare-blocked
+from some networks; see its row for the visible failure behavior:
 
 | Source | Adapter module | Posture |
 |---|---|---|
 | LinkedIn | `src/scrapers/adapters/linkedinAdapter.ts` | **Accepted risk.** LinkedIn's ToS prohibits automated access; we proceed anyway, deliberately and with your explicit sign-off, using only public unauthenticated search/detail endpoints. Conservative rate limiting. |
-| hiring.cafe | `src/scrapers/adapters/hiringCafeAdapter.ts` | Low-risk free scrape; only public listing pages; robots.txt respected. |
+| hiring.cafe | `src/scrapers/adapters/hiringCafeAdapter.ts` | Low-risk free scrape; only public listing pages; robots.txt respected. **Currently unavailable from networks where Cloudflare returns HTTP 403 on every public path (observed 2026-10 from a residential connection).** The adapter fails visibly as `hiring.cafe is unavailable (...)`, naming the source in the per-source summary, and never attempts to bypass the block. Expect reduced coverage until Cloudflare access is restored. |
 | Wellfound | `src/scrapers/adapters/wellfoundAdapter.ts` | **Accepted risk.** Wellfound's Talent General terms exclude scraping; we use only public unauthenticated `/role/` pages (first page). |
-| Welcome to the Jungle | `src/scrapers/adapters/welcomeToTheJungleAdapter.ts` | **Accepted risk.** WTTJ CGUs prohibit automated extraction. We use robots-allowed sitemaps and server-rendered detail pages only. |
+| Welcome to the Jungle | `src/scrapers/adapters/welcomeToTheJungleAdapter.ts` | **Accepted risk.** WTTJ CGUs prohibit automated extraction. We use robots-allowed sitemaps and server-rendered detail pages only. WTTJ is EU/city-oriented: a remote/work-mode or non-European location returns zero results without fetching, because those terms cannot appear in its city-based job slugs. |
 | Built In | `src/scrapers/adapters/builtInAdapter.ts` | **Accepted risk.** Built In's Community ToU prohibit bots/scraping; we stay on robots-sitemap-listed paths. |
 | FlexJobs | `src/scrapers/adapters/flexJobsAdapter.ts` | **Accepted risk.** FlexJobs' ToS prohibit bots and scraping. This adapter is the most conservative (4-5s delay), stays on the public `/remote-jobs` listing page, and may only expose ~200-character *teaser* cards because full descriptions and applying are paywalled. |
 

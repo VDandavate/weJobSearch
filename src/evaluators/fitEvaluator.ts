@@ -139,6 +139,9 @@ export async function loadJobPreferences(
 
 export interface PostingRequirements {
   requiredSkills: string[];
+  // Skills governed by a preferred cue ("nice to have", "preferred", ...).
+  // Collected for display and never scored: only requiredSkills deduct.
+  preferredSkills?: string[];
   requiredYearsOfExperience: number | null;
   requiredDomains: string[];
 }
@@ -568,6 +571,7 @@ export function evaluateFit(input: FitEvaluationInput): FitAssessment {
   const rejectedNonNegotiableIds: string[] = [];
   let hasCustomRule = false;
   let hasLocationReviewRequest = false;
+  let hasClearanceReviewRequest = false;
 
   for (const rule of preferences.nonNegotiables) {
     let outcome: NonNegotiableCheckOutcome = 'compliant';
@@ -632,6 +636,12 @@ export function evaluateFit(input: FitEvaluationInput): FitAssessment {
           note = 'Posting clearance requirement is within eligibility';
         } else {
           note = 'No clearance level available on this posting; cannot evaluate';
+          // A level of 'unknown' means the posting mentions clearance but
+          // states no usable level: that is an eligibility risk a human must
+          // judge, not a silent pass. No facts at all stays note-only.
+          if ((facts.requiredClearanceLevel ?? '').length > 0) {
+            hasClearanceReviewRequest = true;
+          }
         }
         break;
       }
@@ -682,6 +692,12 @@ export function evaluateFit(input: FitEvaluationInput): FitAssessment {
     if (hasLocationReviewRequest) {
       fitStatus = 'manualReview';
       notes.push('A location nonNegotiable requests manualReview for this posting; routed to manualReview rather than rejected');
+    }
+    if (hasClearanceReviewRequest) {
+      fitStatus = 'manualReview';
+      notes.push(
+        'A clearance nonNegotiable is indeterminate: the posting mentions clearance but states no usable level; routed to manualReview without changing the score',
+      );
     }
     // Salary-unknown is deliberately NOT routed here: a posting lacking
     // parseable salary records an 'unknown' check outcome plus a note above,

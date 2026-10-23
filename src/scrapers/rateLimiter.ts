@@ -224,38 +224,65 @@ export function findMatchingGroup(rules: RobotsRules, userAgent: string): Robots
   return merged;
 }
 
+// Robots rule language: '*' matches any sequence, a trailing '$' anchors the
+// end of the path, and every other character is literal. Matching is against
+// the request path including its query string; an empty rule matches all.
 export function robotsRuleMatchesPath(rule: string, path: string): boolean {
   if (rule.length === 0) {
     return true;
   }
-  if (!path.startsWith(rule)) {
-    return false;
+  const anchored = rule.endsWith('$');
+  const pattern = anchored ? rule.slice(0, -1) : rule;
+  if (!pattern.includes('*')) {
+    return anchored ? path === pattern : path.startsWith(pattern);
   }
-  if (rule.endsWith('/')) {
-    return true;
-  }
-  return path.length === rule.length || path[rule.length] === '/';
+  const source = pattern
+    .split('*')
+    .map((segment) => segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  return new RegExp(`^${source}${anchored ? '$' : ''}`).test(path);
+}
+
+// Specificity compares rules by their literal prefix: everything before the
+// first '*' (or before a trailing '$'). A longer prefix is a more specific
+// rule; equal specificity is resolved in favour of Allow.
+export function robotsRuleSpecificity(rule: string): number {
+  const end = rule.endsWith('$') ? rule.length - 1 : rule.length;
+  const wildcard = rule.indexOf('*');
+  return wildcard === -1 || wildcard > end ? end : wildcard;
 }
 
 export function isDisallowedByGroup(group: RobotsGroup, path: string): boolean {
   if (group.disallows.length === 0) {
     return false;
   }
-  let bestMatchLength = -1;
-  let bestMatchAllows = true;
+  let bestLength = -1;
+  let bestAllows = true;
   for (const allow of group.allows) {
-    if (robotsRuleMatchesPath(allow, path) && allow.length > bestMatchLength) {
-      bestMatchLength = allow.length;
-      bestMatchAllows = true;
+    if (robotsRuleMatchesPath(allow, path)) {
+      const length = robotsRuleSpecificity(allow);
+      if (length > bestLength || (length === bestLength && !bestAllows)) {
+        bestLength = length;
+        bestAllows = true;
+      }
     }
   }
   for (const disallow of group.disallows) {
-    if (robotsRuleMatchesPath(disallow, path) && disallow.length > bestMatchLength) {
-      bestMatchLength = disallow.length;
-      bestMatchAllows = false;
+    if (robotsRuleMatchesPath(disallow, path)) {
+      const length = robotsRuleSpecificity(disallow);
+      if (length > bestLength) {
+        bestLength = length;
+        bestAllows = false;
+      }
     }
   }
-  return !bestMatchAllows;
+  return !bestAllows;
+}
+
+// The effective wait is the politeness jitter plus the scheduled backoff. A
+// pure function keeps the additive formula testable without sleeping.
+export function computeEffectiveWaitMs(politenessDelayMs: number, scheduledBackoffMs: number): number {
+  return politenessDelayMs + Math.max(0, scheduledBackoffMs);
 }
 
 export class RateLimiter {
@@ -333,10 +360,10 @@ export class RateLimiter {
     this.delayCount += 1;
     const now = Date.now();
     const elapsed = now - this.lastRequestTimestamp;
-    let waitMs = jitteredDelayMs(this.config.minDelayMs, this.config.maxDelayMs);
-    if (this.nextBackoffDelayMs > 0) {
-      waitMs = Math.max(waitMs, this.nextBackoffDelayMs);
-    }
+    const waitMs = computeEffectiveWaitMs(
+      jitteredDelayMs(this.config.minDelayMs, this.config.maxDelayMs),
+      this.nextBackoffDelayMs,
+    );
     if (elapsed < waitMs) {
       await sleep(waitMs - elapsed);
     }

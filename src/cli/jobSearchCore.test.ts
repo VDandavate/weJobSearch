@@ -1971,7 +1971,25 @@ describe('exportData / importData commands (EUO-10)', () => {
   async function seedRoot(rootPath: string): Promise<void> {
     await mkdir(join(rootPath, 'applications'), { recursive: true });
     await writeFile(join(rootPath, 'masterProfile.md'), '# Jane Sample\n', 'utf8');
-    await writeFile(join(rootPath, 'jobPreferences.yaml'), 'compensation:\n  currency: USD\n', 'utf8');
+    await writeFile(
+      join(rootPath, 'jobPreferences.yaml'),
+      [
+        'compensation:',
+        '  currency: USD',
+        '  minAcceptableBase: 0',
+        '  targetBase: 0',
+        '  countsBonusTowardMin: false',
+        '  countsEquityTowardMin: false',
+        'clearance:',
+        '  currentStatus: none',
+        '  currentLevel: null',
+        '  eligibleToObtain: true',
+        '  requiresSponsorshipForVisa: false',
+        'nonNegotiables: []',
+        'preferredLocations: []',
+      ].join('\n') + '\n',
+      'utf8',
+    );
     await writeFile(join(rootPath, 'screeningAnswers.json'), '{"workAuthorization":{"usCitizen":false}}', 'utf8');
     await writeFile(join(rootPath, 'networkingContacts.json'), '{"contacts":[]}', 'utf8');
     await writeFile(

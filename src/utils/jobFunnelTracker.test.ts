@@ -1,9 +1,10 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DuplicateApplicationError,
+  appendApplicationHistory,
   applicationHistorySchema,
   applicationRecordSchema,
   computePostingHash,
@@ -16,6 +17,21 @@ import {
   writeApplicationHistory,
   type ApplicationRecord,
 } from './jobFunnelTracker';
+import { writeFileAtomically } from './atomicWrite';
+
+// Count atomic writes instead of touching internals: every rewrite of the
+// history file goes through writeFileAtomically, so a per-posting rewrite
+// shows up as N calls. Wrapped around the real implementation.
+vi.mock('./atomicWrite', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./atomicWrite')>();
+  return { ...actual, writeFileAtomically: vi.fn(actual.writeFileAtomically) };
+});
+
+function historyWriteCount(): number {
+  return vi
+    .mocked(writeFileAtomically)
+    .mock.calls.filter(([targetPath]) => targetPath.endsWith('applicationHistory.json')).length;
+}
 
 async function withTempFile<T>(fn: (filePath: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), 'weJobSearch-funnel-test-'));
@@ -281,6 +297,67 @@ describe('markResumeGenerated (EUO-16)', () => {
     });
   });
 });
+describe('appendApplicationHistory (one atomic write per batch)', () => {
+  it('writes a batch once and does not fork a within-batch duplicate', async () => {
+    await withTempFile(async (filePath) => {
+      const records = [
+        baseRecord({ postingHash: 'hash-a' }),
+        baseRecord({ postingHash: 'hash-b', jobUrl: 'https://alpha.test/jobs/2' }),
+        baseRecord({ postingHash: 'hash-a', jobUrl: 'https://alpha.test/jobs/3' }),
+      ];
+      vi.mocked(writeFileAtomically).mockClear();
+      const result = await appendApplicationHistory(records, filePath);
+      expect(result.added.map((record) => record.postingHash)).toEqual(['hash-a', 'hash-b']);
+      expect(result.duplicates).toHaveLength(1);
+      expect(historyWriteCount()).toBe(1);
+      const history = await readApplicationHistory(filePath);
+      expect(history.applications.map((record) => record.postingHash)).toEqual(['hash-a', 'hash-b']);
+    });
+  });
+
+  it('reports an existing hash as a duplicate and still writes only once', async () => {
+    await withTempFile(async (filePath) => {
+      await appendApplicationHistory([baseRecord({ postingHash: 'hash-a' })], filePath);
+      vi.mocked(writeFileAtomically).mockClear();
+      const result = await appendApplicationHistory(
+        [
+          baseRecord({ postingHash: 'hash-a' }),
+          baseRecord({ postingHash: 'hash-c', jobUrl: 'https://alpha.test/jobs/4' }),
+        ],
+        filePath,
+      );
+      expect(result.added.map((record) => record.postingHash)).toEqual(['hash-c']);
+      expect(result.duplicates.map((record) => record.postingHash)).toEqual(['hash-a']);
+      expect(historyWriteCount()).toBe(1);
+      const history = await readApplicationHistory(filePath);
+      expect(history.applications.map((record) => record.postingHash)).toEqual(['hash-a', 'hash-c']);
+    });
+  });
+
+  it('skips the write entirely when every record is already present', async () => {
+    await withTempFile(async (filePath) => {
+      await appendApplicationHistory([baseRecord({ postingHash: 'hash-a' })], filePath);
+      vi.mocked(writeFileAtomically).mockClear();
+      const result = await appendApplicationHistory([baseRecord({ postingHash: 'hash-a' })], filePath);
+      expect(result.added).toHaveLength(0);
+      expect(result.duplicates).toHaveLength(1);
+      expect(historyWriteCount()).toBe(0);
+    });
+  });
+
+  it('refuses a malformed existing history and writes nothing', async () => {
+    await withTempFile(async (filePath) => {
+      await writeFile(filePath, '{ not json', 'utf8');
+      vi.mocked(writeFileAtomically).mockClear();
+      await expect(
+        appendApplicationHistory([baseRecord({ postingHash: 'hash-x' })], filePath),
+      ).rejects.toThrow(/Malformed application history/);
+      expect(historyWriteCount()).toBe(0);
+      expect(await readFile(filePath, 'utf8')).toBe('{ not json');
+    });
+  });
+});
+
 describe('logApplication location-aware identity (U09)', () => {
   it('writes a distinct record for the same role in a new city', async () => {
     await withTempFile(async (filePath) => {

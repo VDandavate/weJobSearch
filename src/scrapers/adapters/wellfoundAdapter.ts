@@ -1,7 +1,8 @@
 import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
-import { extractNextDataJson, trimText } from '../htmlUtils';
+import { fetchBoundedText } from '../httpFetcher';
+import { extractNextDataJson, postingMatchesLocation, trimText } from '../htmlUtils';
 import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique built fresh from public site inspection (SDD Requirement 8, row 3)
@@ -42,8 +43,6 @@ import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter'
 //     on the page.
 
 export const wellfoundBaseUrl = 'https://wellfound.com';
-
-const userAgent = scraperUserAgent;
 
 const nextDataScriptId = '__NEXT_DATA__';
 
@@ -264,7 +263,10 @@ export class WellfoundAdapter implements SourceAdapter {
         }
       }
     }
-    return postings;
+    // Location request enforcement (audit finding 14): Wellfound redirects a
+    // location path to the generic page, so the listing itself is not filtered.
+    // Apply the same work-mode/city check the other adapters use.
+    return postings.filter((posting) => postingMatchesLocation(posting.location, location));
   }
 
   // Every request gates on the shared limiter: robots.txt policy check then a
@@ -274,24 +276,6 @@ export class WellfoundAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `Wellfound request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url);
   }
 }

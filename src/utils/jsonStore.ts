@@ -76,7 +76,10 @@ export interface JsonStoreWriteOptions<T> {
   resolvedPath: string;
   noun: string;
   schema: z.ZodType<T>;
-  verifyExisting: () => Promise<unknown>;
+  // Optional for a read-modify-write caller that already read and validated
+  // the same file (batch append): it must not pay for a second read. Writers
+  // that did not read pass it to refuse overwriting malformed content.
+  verifyExisting?: () => Promise<unknown>;
   confine?: { root: string; label: string };
 }
 
@@ -89,7 +92,9 @@ export async function writeJsonStoreFile<T>(options: JsonStoreWriteOptions<T>): 
   if (options.confine !== undefined) {
     assertConfinedToRoot(options.confine.root, options.resolvedPath, options.confine.label);
   }
-  await options.verifyExisting();
+  if (options.verifyExisting !== undefined) {
+    await options.verifyExisting();
+  }
   const result = options.schema.safeParse(options.data);
   if (!result.success) {
     throw new Error(

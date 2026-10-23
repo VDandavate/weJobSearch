@@ -4,6 +4,7 @@ import os from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createIsolatedDataRootFromFixtures } from '../testUtils/isolatedRoot';
+import { extractPdfText } from '../utils/atsChecker';
 import { shippedTemplatesRoot } from '../utils/canonicalDataRoot';
 import {
   applicationFolderSegment,
@@ -455,6 +456,18 @@ describe('generateResumePreview', () => {
       expect(result.variantName).toBe('usStandardResume');
       expect(result.pageCount).toBe(1);
       expect(result.atsCheck.passed).toBe(true);
+    });
+  });
+
+  it('prints the city and state once in the PDF text of both variants', async () => {
+    await previewSandbox(async () => {
+      for (const explicitVariant of ['usStandardResume', 'usDetailedResume'] as const) {
+        const result = await generateResumePreview({ explicitVariant });
+        expect(result.pageCount).toBe(1);
+        const pdfText = await extractPdfText(await readFile(result.pdfPath));
+        const occurrences = pdfText.split('Austin, TX').length - 1;
+        expect(occurrences, `${explicitVariant} should print Austin, TX exactly once`).toBe(1);
+      }
     });
   });
 });

@@ -130,7 +130,9 @@ function coverLetterHelpText(): string[] {
     '  --company NAME                  Target company (required).',
     '  --role TITLE                    Target role title (required).',
     '  --postingRequirements "A, B"    Posting requirements; only those genuinely supported by',
-    '                                  masterProfile.md are referenced (optional, comma-separated).',
+    '                                  masterProfile.md are referenced (optional, comma-separated;',
+    '                                  omitted means the stored posting description is used).',
+    '  --postingHash HASH              Target one stored record when company and role match several.',
     '  --dataRoot PATH                 Whole data-root relocation (default canonical data root).',
     '  --help                          Show this help.',
   ];
@@ -225,6 +227,7 @@ export function showHelpText(): string[] {
     'Options:',
     '  --company NAME           Company as recorded when the posting was evaluated (required).',
     '  --role TITLE            Role title as recorded when the posting was evaluated (required).',
+    '  --postingHash HASH      Target one stored record when company and role match several.',
     '  --dataRoot PATH          Whole data-root relocation (default canonical data root).',
     '  --help                  Show this help.',
   ];
@@ -244,6 +247,7 @@ function reviewHelpText(): string[] {
     'Options:',
     '  --company NAME           Company as recorded when the posting was evaluated (required).',
     '  --role TITLE            Role title as recorded when the posting was evaluated (required).',
+    '  --postingHash HASH      Target one stored record when company and role match several.',
     '  --dataRoot PATH          Whole data-root relocation (default canonical data root).',
     '  --help                  Show this help.',
   ];
@@ -266,6 +270,7 @@ export function updateStatusHelpText(): string[] {
     '  --role TITLE            Role title as recorded when the posting was evaluated (required).',
     '  --status interviewing|offer|rejected  New status (required).',
     '  --notes TEXT            Optional note stored on the status change.',
+    '  --postingHash HASH      Target one stored record when company and role match several.',
     '  --dataRoot PATH         Whole data-root relocation (default canonical data root).',
     '  --help                  Show this help.',
   ];
@@ -543,6 +548,7 @@ export function confirmAppHelpText(): string[] {
     '  --company NAME       Company as recorded when the posting was evaluated (required).',
     '  --role TITLE        Role title as recorded when the posting was evaluated (required).',
     '  --notes TEXT        Optional note stored on the confirmation (e.g. portal used).',
+    '  --postingHash HASH  Target one stored record when company and role match several.',
     '  --dataRoot PATH     Whole data-root relocation (default canonical data root).',
     '  --help              Show this help.',
   ];

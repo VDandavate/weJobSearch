@@ -406,7 +406,10 @@ export function resolveTemplatePath(template: string, dataRoot?: string | null):
     return assertConfinedToRoot(userTemplatesRoot(dataRoot), resolved, 'templatePath');
   }
   const stripped = template.replace(/^\.\//, '').replace(/^templates\//, '');
-  const shippedCandidate = join(shipped, stripped);
+  // A relative reference is still user-controlled, so confine it before the
+  // existence check: ../../etc/passwd must throw here, not be returned just
+  // because the file exists outside the shipped root.
+  const shippedCandidate = assertConfinedToRoot(shipped, join(shipped, stripped), 'templatePath');
   if (existsSync(shippedCandidate)) {
     return shippedCandidate;
   }

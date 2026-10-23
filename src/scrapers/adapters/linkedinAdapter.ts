@@ -1,7 +1,8 @@
 import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
-import { cleanText, decodeHtmlEntities, stripTags } from '../htmlUtils';
+import { fetchBoundedText } from '../httpFetcher';
+import { cleanText, decodeHtmlEntities, postingMatchesLocation, stripTags } from '../htmlUtils';
 import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique ported from .reference/aiJobSearch/.agents/skills/linkedin-search/
@@ -14,8 +15,6 @@ import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter'
 
 export const searchUrl = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
 export const detailUrl = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting';
-
-const userAgent = scraperUserAgent;
 
 export type LinkedInWorkplaceType = 'onsite' | 'remote' | 'hybrid';
 
@@ -333,7 +332,11 @@ export class LinkedInAdapter implements SourceAdapter {
         postings.push(this.toRawPosting(card, detail));
       }
     }
-    return postings;
+    // Location request enforcement (audit finding 14): the search URL sends a
+    // location, but LinkedIn does not reliably filter the cards. A 'Remote'
+    // request is a work-mode filter, not a city, and an unlocatable posting is
+    // never presented as a specific-location match.
+    return postings.filter((posting) => postingMatchesLocation(posting.location, location));
   }
 
   // Public detail lookup for later evaluate --jobUrl flows. Returns null when
@@ -392,26 +395,7 @@ export class LinkedInAdapter implements SourceAdapter {
   private async fetchHtml(url: string): Promise<string> {
     await this.limiter.assertPathAllowed(url);
     await this.limiter.beforeRequest();
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': userAgent,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-    if (response.status === 404) {
-      return '';
-    }
-    if (!response.ok) {
-      throw new HttpStatusError(
-        response.status,
-        `LinkedIn request failed with status ${response.status}`,
-      );
-    }
-    return response.text();
+    return fetchBoundedText(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
   }
 
   private toRawPosting(card: LinkedInJobCard, detail: LinkedInJobDetail): RawPosting {

@@ -17,13 +17,17 @@ interface TimeoutOwner {
 }
 
 const timeoutOwners: TimeoutOwner[] = [
-  { file: 'adapters/linkedinAdapter.ts', importSpecifier: '../requestTimeout' },
-  { file: 'adapters/hiringCafeAdapter.ts', importSpecifier: '../requestTimeout' },
-  { file: 'adapters/wellfoundAdapter.ts', importSpecifier: '../requestTimeout' },
-  { file: 'adapters/welcomeToTheJungleAdapter.ts', importSpecifier: '../requestTimeout' },
-  { file: 'adapters/builtInAdapter.ts', importSpecifier: '../requestTimeout' },
-  { file: 'adapters/flexJobsAdapter.ts', importSpecifier: '../requestTimeout' },
+  { file: 'httpFetcher.ts', importSpecifier: './requestTimeout' },
   { file: 'rateLimiter.ts', importSpecifier: './requestTimeout' },
+];
+
+const adapterFiles = [
+  'adapters/linkedinAdapter.ts',
+  'adapters/hiringCafeAdapter.ts',
+  'adapters/wellfoundAdapter.ts',
+  'adapters/welcomeToTheJungleAdapter.ts',
+  'adapters/builtInAdapter.ts',
+  'adapters/flexJobsAdapter.ts',
 ];
 
 describe('defaultRequestTimeoutMs: shared timeout constant (Phase 7c)', () => {
@@ -31,35 +35,31 @@ describe('defaultRequestTimeoutMs: shared timeout constant (Phase 7c)', () => {
     expect(defaultRequestTimeoutMs).toBe(15000);
   });
 
-  it('covers all six adapters plus the rate limiter exactly once', () => {
+  it('is owned by the shared bounded fetcher and the rate limiter', () => {
     expect(timeoutOwners.map((owner) => owner.file).sort()).toEqual(
-      [
-        'adapters/linkedinAdapter.ts',
-        'adapters/hiringCafeAdapter.ts',
-        'adapters/wellfoundAdapter.ts',
-        'adapters/welcomeToTheJungleAdapter.ts',
-        'adapters/builtInAdapter.ts',
-        'adapters/flexJobsAdapter.ts',
-        'rateLimiter.ts',
-      ].sort(),
+      ['httpFetcher.ts', 'rateLimiter.ts'].sort(),
     );
   });
 
-  it('every fetcher imports the shared constant and declares no local timeout literal', async () => {
+  it('every request path imports the shared constant and declares no local timeout literal', async () => {
     const violations: string[] = [];
+    const files = [...timeoutOwners.map((owner) => owner.file), ...adapterFiles];
+    for (const file of files) {
+      const text = await readFile(resolve(here, file), 'utf8');
+      if (/const requestTimeoutMs\s*=\s*15000/.test(text)) {
+        violations.push(`${file}: still declares a local requestTimeoutMs = 15000`);
+      }
+      if (/AbortSignal\.timeout\(10000\)/.test(text)) {
+        violations.push(`${file}: still uses the divergent AbortSignal.timeout(10000)`);
+      }
+      if (/AbortSignal\.timeout\(15000\)/.test(text)) {
+        violations.push(`${file}: still uses a literal AbortSignal.timeout(15000)`);
+      }
+    }
     for (const owner of timeoutOwners) {
       const text = await readFile(resolve(here, owner.file), 'utf8');
       if (!text.includes(owner.importSpecifier)) {
         violations.push(`${owner.file}: missing import from ${owner.importSpecifier}`);
-      }
-      if (/const requestTimeoutMs\s*=\s*15000/.test(text)) {
-        violations.push(`${owner.file}: still declares a local requestTimeoutMs = 15000`);
-      }
-      if (/AbortSignal\.timeout\(10000\)/.test(text)) {
-        violations.push(`${owner.file}: still uses the divergent AbortSignal.timeout(10000)`);
-      }
-      if (/AbortSignal\.timeout\(15000\)/.test(text)) {
-        violations.push(`${owner.file}: still uses a literal AbortSignal.timeout(15000)`);
       }
     }
     expect(violations).toEqual([]);

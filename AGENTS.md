@@ -31,7 +31,7 @@ These apply to every file you create or edit, with no exceptions:
 npm install            # needs Node >= 24 (.nvmrc pins 26.5.0)
 npm run build          # tsc -> dist/ (dist/ is gitignored; required before CLI/MCP runs)
 npm run lint           # tsc --noEmit (typecheck, no output)
-npm test               # vitest run (all suites; 958 tests / 59 files in this baseline)
+npm test               # vitest run (all suites; 990 tests / 64 files in this baseline)
 npx vitest run src/evaluators/fitEvaluator.test.ts   # single file
 npm run namingLinter   # naming gate; works on a fresh clone without build (Node 24+ type stripping)
 npm run setupHooks     # one-time per clone: git config core.hooksPath .githooks (pre-commit naming gate)
@@ -77,6 +77,20 @@ npm run setupHooks     # one-time per clone: git config core.hooksPath .githooks
 - No empty directory, dead link, or unused file introduced; every SDD cross-reference resolves to a real file.
 - No command or MCP tool chains into another; no capability was added that bypasses manual confirmation.
 - If a design decision isn't covered by the SDD, stop and ask instead of guessing.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `privateDocs/.scratch/`. See `privateDocs/docs/agents/IssueTracker.md`.
+
+### Triage labels
+
+Five canonical triage roles use their default label strings. See `privateDocs/docs/agents/TriageLabels.md`.
+
+### Domain docs
+
+Single-context: `privateDocs/GLOSSARY.md` plus ADRs in `privateDocs/docs/adr/`. See `privateDocs/docs/agents/Domain.md`.
 
 ## If context is running long
 
