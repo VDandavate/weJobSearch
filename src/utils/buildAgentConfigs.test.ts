@@ -111,10 +111,59 @@ describe('buildAgentConfigs', () => {
 });
 
 describe('setup command contract', () => {
+  function setupBody(): string {
+    return (buildClaudeCommandsText().setup.split('## Command: setup')[1] ?? '').replace(/\s+/g, ' ');
+  }
+
+  function setupStep(start: string, end?: string): string {
+    const body = setupBody();
+    const from = body.indexOf(start);
+    expect(from, `${start} missing from the setup command`).toBeGreaterThanOrEqual(0);
+    if (end === undefined) {
+      return body.slice(from);
+    }
+    const to = body.indexOf(end, from);
+    expect(to, `${end} missing from the setup command`).toBeGreaterThan(from);
+    return body.slice(from, to);
+  }
+
   it('generates a setup command that anchors on the SDD', () => {
     const commands = buildClaudeCommandsText();
     expect(Object.keys(commands)).toContain('setup');
     expect(commands.setup).toContain('docs/weJobSearch-SDD.md');
+  });
+
+  it('Inspect shows the data root in plain language and defers relocation detail', () => {
+    const inspect = setupStep('1. Inspect.', '2. Documents.');
+    expect(inspect).toContain('chosen automatically from your system account');
+    expect(inspect).toContain('nothing to configure');
+    const conditional = inspect.indexOf('Only if the user asks about moving the data');
+    expect(conditional).toBeGreaterThanOrEqual(0);
+    const flagPositions = [
+      inspect.indexOf('--dataRoot'),
+      inspect.indexOf('WEJOBSEARCHDATAROOT'),
+    ].filter((position) => position >= 0);
+    expect(flagPositions.length).toBeGreaterThan(0);
+    expect(Math.min(...flagPositions)).toBeGreaterThan(conditional);
+  });
+
+  it('Documents requires a plain-language staging explanation before copying', () => {
+    const documents = setupStep('2. Documents.', '3. Profile draft.');
+    expect(documents).toContain('Before staging anything');
+    expect(documents).toContain('reads only inside its data root');
+    expect(documents).toContain('originals are left untouched');
+  });
+
+  it('Stop requires the full closing-message contract', () => {
+    const stop = setupStep('12. Stop.');
+    expect(stop).toContain('searchByProfile');
+    expect(stop).toContain('primary next step');
+    expect(stop).toContain('searchJobPostings');
+    expect(stop).toContain('saved search');
+    expect(stop).toContain('scores it against the profile and logs it to application history');
+    expect(stop).toContain('networking contact');
+    expect(stop).toContain('funnel report');
+    expect(stop).toContain('nothing chains automatically');
   });
 
   it('names the MCP tools in flow order', () => {

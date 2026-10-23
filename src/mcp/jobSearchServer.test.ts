@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMcpServer, serverInfo, type McpServerDependencies } from './jobSearchServer';
 import { runGenerate, runSearchCommand } from '../cli/jobSearchCore';
 import { JobSpyAdapterRegistry, type RawPosting, type SourceAdapter } from '../scrapers/jobSpyAdapter';
@@ -997,16 +997,20 @@ describe('jobSearchServer (MCP)', () => {
     });
   });
 
-  it('ingestDocuments reports a clear error for a missing directory', async () => {
+  it('ingestDocuments returns an empty result for a not-yet-created directory', async () => {
     await withSandbox(async (paths) => {
       const connected = await connectToServer(paths, makeRegistry([]));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         const result = await callTool(connected, 'ingestDocuments', {
           dirPath: join(paths.dir, 'no-such-dir'),
         });
-        expect(result.isError).toBe(true);
-        expect(result.text).toContain('no-such-dir');
+        expect(result.isError).toBe(false);
+        expect(result.text).toContain('No supported documents found');
+        expect(result.structuredContent?.documentCount).toBe(0);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not exist yet'));
       } finally {
+        warnSpy.mockRestore();
         await connected.close();
       }
     });

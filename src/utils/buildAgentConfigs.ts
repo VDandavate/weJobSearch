@@ -155,20 +155,31 @@ export function buildSetupCommand(): string {
 First-run onboarding and configuration. Work through these steps in order; do
 not skip ahead, and do not chain into any other capability.
 
-1. Inspect. Call getUserProfile. Print the resolved data root and this file map:
-   masterProfile.md (profile), jobPreferences.yaml (compensation, clearance,
-   non-negotiables, locations, target roles, radius), screeningAnswers.json
-   (portal answers), networkingContacts.json (contacts and referrals),
-   resumeVariants.yaml (resume variants), savedSearches.json and
-   searchHistory.json (search records), applications/applicationHistory.json
-   (application tracking), documents/ (source documents), previews/ and
-   templates/. If every profile file is already configured, show what is set
-   and offer section-by-section updates instead of starting over. Relocation is
-   opt-in through --dataRoot or WEJOBSEARCHDATAROOT only; never move existing
-   data.
+1. Inspect. Call getUserProfile. Print the resolved data root with one
+   plain-language line: "Your job search data lives here. It was chosen
+   automatically from your system account, so there is nothing to configure."
+   Then show this file map: masterProfile.md (profile), jobPreferences.yaml
+   (compensation, clearance, non-negotiables, locations, target roles, radius),
+   screeningAnswers.json (portal answers), networkingContacts.json (contacts
+   and referrals), resumeVariants.yaml (resume variants), savedSearches.json
+   and searchHistory.json (search records),
+   applications/applicationHistory.json (application tracking), documents/
+   (source documents), previews/ and templates/. If every profile file is
+   already configured, show what is set and offer section-by-section updates
+   instead of starting over. Do not mention relocation mechanics by default.
+   Only if the user asks about moving the data, explain that the whole root
+   can be relocated with the --dataRoot flag or the WEJOBSEARCHDATAROOT
+   environment variable, that per-file relocation through the profile tools
+   is unsupported by design, and that this should happen before any files are
+   written. Never move existing data.
 
-2. Documents. Ask which folder or folders hold the user's resumes. Call
-   ingestDocuments once per folder (top-level scan only). Name every
+2. Documents. Before staging anything, explain in one plain-language line that
+   the tool reads only inside its data root, so it will copy the files into
+   the root's documents/ directory and the originals are left untouched. Ask
+   which folder or folders hold the user's resumes. Call ingestDocuments once
+   per folder (top-level scan only). If a folder is outside the data root, the
+   confinement error names the documents/ directory to copy into; stage the
+   files there and retry rather than reading outside the root. Name every
    unreadable, empty, or image-only file. Ask for another file or for the
    details to be typed. Never invent content for a file you could not read. If
    the user has no documents, run the rest of this flow as an interview.
@@ -223,8 +234,17 @@ not skip ahead, and do not chain into any other capability.
     unless the user asks. After the results, offer to save the search, defaulting
     to no.
 
-12. Stop. Print next steps and the command menu. Do not generate a resume,
-    cover letter, or outreach message, and do not confirm an application.`;
+12. Stop. Print the closing message and the command menu. The closing message
+    must contain one plain-language line for each of these, in this order:
+    (1) profile-based search (searchByProfile) is the primary next step when
+    target roles exist; otherwise keyword search (searchJobPostings) is the
+    alternative; (2) a saved search is a remembered keyword and location
+    search the agent can re-run or save on request; (3) evaluating a posting
+    URL scores it against the profile and logs it to application history;
+    (4) logging a networking contact tracks referrals and follow-ups that the
+    funnel report surfaces; (5) nothing chains automatically, so each step is
+    requested explicitly. Do not generate a resume, cover letter, or outreach
+    message, and do not confirm an application.`;
 }
 
 export function buildClaudeCommandsText(): Record<string, string> {

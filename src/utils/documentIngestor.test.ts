@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ingestDocuments, type IngestedDocumentSummary } from './documentIngestor';
@@ -221,17 +221,55 @@ describe('documentIngestor', () => {
 
   it('returns an empty result for an empty directory', async () => {
     const dir = await makeDocumentDir();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const summaries = await ingestDocuments(dir);
       expect(summaries).toEqual([]);
+      expect(warnSpy).not.toHaveBeenCalled();
     } finally {
+      warnSpy.mockRestore();
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it('throws a clear error naming the path for a missing directory', async () => {
-    const missing = join(tmpdir(), 'weJobSearch-ingest-does-not-exist');
-    await expect(ingestDocuments(missing)).rejects.toThrow(missing);
+  it('returns the same empty result with a friendly note for a not-yet-created directory', async () => {
+    const root = await makeDocumentDir();
+    const missing = join(root, 'documents');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(ingestDocuments(missing)).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not exist yet'));
+      // Ingestion must not create the directory as a side effect.
+      await expect(readdir(missing)).rejects.toThrow(/ENOENT/);
+    } finally {
+      warnSpy.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('redacts the home path in the missing-directory note', async () => {
+    const home = homedir();
+    const missing = join(home, `weJobSearch-ingest-missing-${randomUUID()}`);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(ingestDocuments(missing, home)).resolves.toEqual([]);
+      const note = warnSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(note).toContain('<dataRoot>');
+      expect(note).not.toContain(home);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('still throws for non-ENOENT scan failures', async () => {
+    const root = await makeDocumentDir();
+    const notADirectory = join(root, 'documents.txt');
+    try {
+      await writeFile(notADirectory, 'not a directory\n', 'utf8');
+      await expect(ingestDocuments(notADirectory)).rejects.toThrow('Unable to read documents directory');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('honors an explicitly injected rootDir over the environment data root', async () => {

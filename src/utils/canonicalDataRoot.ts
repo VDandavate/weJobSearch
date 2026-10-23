@@ -180,9 +180,19 @@ export function assertConfinedToRoot(
   const resolvedRoot = resolve(rootDir);
   const resolvedCandidate = resolve(candidatePath);
   if (!isPathInside(resolvedRoot, resolvedCandidate)) {
-    throw new Error(
-      `H1a confinement violation: ${label} "${redactHomePrefix(candidatePath)}" (resolved: ${redactHomePrefix(resolvedCandidate)}) is outside root "${redactHomePrefix(rootDir)}" (resolved: ${redactHomePrefix(resolvedRoot)})`,
-    );
+    const violation =
+      `H1a confinement violation: ${label} "${redactHomePrefix(candidatePath)}" (resolved: ${redactHomePrefix(resolvedCandidate)}) is outside root "${redactHomePrefix(rootDir)}" (resolved: ${redactHomePrefix(resolvedRoot)})`;
+    // Document ingestion is the one caller whose remedy is staging: copy the
+    // files into the data root's documents directory, then retry. Other
+    // callers keep the bare violation so the advice appears only where it
+    // actually applies.
+    if (label === 'ingestDocuments') {
+      const stagingDirectory = join(rootDir, documentsDirectoryName);
+      throw new Error(
+        `${violation}. Copy the files into "${redactHomePrefix(stagingDirectory)}" and retry; the originals are left untouched.`,
+      );
+    }
+    throw new Error(violation);
   }
   return resolvedCandidate;
 }
