@@ -5,6 +5,9 @@
 # Local agent/host settings (may hold machine paths or credentials).
 .claude/settings.local.json
 
+# Local-only agent docs: issue tracker, triage vocabulary, domain glossary/ADRs.
+privateDocs/
+
 # Dependencies and build output
 node_modules/
 dist/

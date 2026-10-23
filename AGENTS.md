@@ -78,6 +78,20 @@ npm run setupHooks     # one-time per clone: git config core.hooksPath .githooks
 - No command or MCP tool chains into another; no capability was added that bypasses manual confirmation.
 - If a design decision isn't covered by the SDD, stop and ask instead of guessing.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `privateDocs/.scratch/`. See `privateDocs/docs/agents/IssueTracker.md`.
+
+### Triage labels
+
+Five canonical triage roles use their default label strings. See `privateDocs/docs/agents/TriageLabels.md`.
+
+### Domain docs
+
+Single-context: `privateDocs/GLOSSARY.md` plus ADRs in `privateDocs/docs/adr/`. See `privateDocs/docs/agents/Domain.md`.
+
 ## If context is running long
 
 Stop, summarize what you have completed against the SDD, and suggest a fresh session for the remainder. Long sessions are where naming drift and rule erosion happen — prefer one command, one deliverable, then a clean session.
