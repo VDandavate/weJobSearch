@@ -493,8 +493,8 @@ export interface ResumeBinding {
   cityState: string;
   email: string;
   phone: string;
-  linkedIn: string;
-  portfolio: string;
+  linkedIn?: string;
+  portfolio?: string;
   summary: string;
   experience: readonly Readonly<ExperienceRole>[];
   skills: readonly Readonly<SkillGroup>[];
@@ -503,13 +503,15 @@ export interface ResumeBinding {
 }
 
 export function mapProfileToBinding(profile: ParsedMasterProfile | ProfileInput): ResumeBinding {
+  const linkedIn = profile.linkedIn.trim();
+  const portfolio = profile.portfolio.trim();
   const binding: ResumeBinding = {
     name: profile.name,
     cityState: profile.cityState,
     email: profile.email,
     phone: profile.phone,
-    linkedIn: profile.linkedIn,
-    portfolio: profile.portfolio,
+    ...(linkedIn === '' ? {} : { linkedIn }),
+    ...(portfolio === '' ? {} : { portfolio }),
     summary: profile.summary,
     experience: profile.experience.map((entry) => ({ ...entry, bullets: [...entry.bullets] })),
     skills: profile.skills.map((group) => ({ category: group.category, items: [...group.items] })),
@@ -956,8 +958,12 @@ export function serializeBinding(binding: ResumeBinding): string {
   lines.push(`  cityState: ${typstString(binding.cityState)},`);
   lines.push(`  email: ${typstString(binding.email)},`);
   lines.push(`  phone: ${typstString(binding.phone)},`);
-  lines.push(`  linkedIn: ${typstString(binding.linkedIn)},`);
-  lines.push(`  portfolio: ${typstString(binding.portfolio)},`);
+  if (binding.linkedIn !== undefined) {
+    lines.push(`  linkedIn: ${typstString(binding.linkedIn)},`);
+  }
+  if (binding.portfolio !== undefined) {
+    lines.push(`  portfolio: ${typstString(binding.portfolio)},`);
+  }
   lines.push(`  summary: ${typstString(binding.summary)},`);
   if (binding.experience.length > 0) {
     lines.push('  experience: (');
@@ -1137,8 +1143,8 @@ export function unionProfilesTokens(binding: ResumeBinding): Set<string> {
     binding.cityState,
     binding.email,
     binding.phone,
-    binding.linkedIn,
-    binding.portfolio,
+    binding.linkedIn ?? '',
+    binding.portfolio ?? '',
     binding.summary,
     ...binding.certifications,
   ];

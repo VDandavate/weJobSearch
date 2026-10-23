@@ -218,3 +218,26 @@ describe('report/reviewQueue/addContact/digest dataRoot flags (U43)', () => {
     expect(parseDigestArgs(['--dataRoot', '/tmp/rootd']).dataRoot).toBe('/tmp/rootd');
   });
 });
+
+  it('parses --radiusMiles for search', () => {
+    expect(parseSearchArgs(['--keywords', 'engineer', '--radiusMiles', '25'])).toEqual({
+      keywords: 'engineer',
+      radiusMiles: 25,
+    });
+    expect(parseSearchArgs(['--keywords', 'engineer', '--radiusMiles=25'])).toEqual({
+      keywords: 'engineer',
+      radiusMiles: 25,
+    });
+  });
+
+  it('rejects non-numeric --radiusMiles', () => {
+    expect(() => parseSearchArgs(['--keywords', 'e', '--radiusMiles', 'notanumber'])).toThrow(
+      "Invalid --radiusMiles value 'notanumber': expected a finite number.",
+    );
+    expect(() => parseSearchArgs(['--keywords', 'e', '--radiusMiles', '0'])).toThrow(
+      "Invalid --radiusMiles value '0': must be a positive integer.",
+    );
+    expect(() => parseSearchArgs(['--keywords', 'e', '--radiusMiles', '-5'])).toThrow(
+      "Invalid --radiusMiles value '-5': must be a positive integer.",
+    );
+  });

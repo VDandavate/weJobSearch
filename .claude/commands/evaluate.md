@@ -49,6 +49,9 @@ Hard rules that apply to every change, with no exceptions:
 
 8. Strict data-root confinement. The tool never reads or writes outside the resolved data root. Users stage files by copying into ~/Documents/weJobSearch/<username>/documents/ via the OS; the engine resolves the root through canonicalDataRoot.ts, and the only relocation mechanisms are --dataRoot and WEJOBSEARCHDATAROOT — both move the entire root, never a single file path. No CLI or MCP schema accepts a per-file path override; all filenames are fixed (masterProfile.md, jobPreferences.yaml, screeningAnswers.json, networkingContacts.json, resumeVariants.yaml, applicationHistory.json). Templates resolve through a fixed allowlist (shipped templates/ and <dataRoot>/templates/ only, via resolveTemplatePath). Report file output is redacted by default with a terminal warning; profile completion blocks on required-field placeholders.
 
+First-run setup: run the `setup` command. Hosts without command files read
+`.claude/commands/setup.md` and follow it.
+
 Follow the numbered build sequence in AGENTS.md; do not skip ahead. Test only
 against fixtures/, never against real profile/ or canonical-root data files.
 

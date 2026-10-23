@@ -1,7 +1,9 @@
-import { type RateLimiter } from '../rateLimiter';
+import { HttpStatusError, type RateLimiter } from '../rateLimiter';
+import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
+import { scraperUserAgent } from '../userAgent';
 import { fetchBoundedText } from '../httpFetcher';
 import { cleanText, decodeHtmlEntities, postingMatchesLocation, stripTags } from '../htmlUtils';
-import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique ported from .reference/aiJobSearch/.agents/skills/linkedin-search/
 // per SDD Section 1.3: LinkedIn public "jobs-guest" endpoints, unauthenticated.
@@ -21,6 +23,7 @@ export interface LinkedInSearchOptions {
   workplaceType?: LinkedInWorkplaceType;
   start?: number;
   limit?: number;
+  radiusMiles?: number;
 }
 
 export interface LinkedInJobCard {
@@ -280,6 +283,9 @@ export function buildSearchUrl(
   if (start > 0) {
     params.set('start', String(start));
   }
+  if (options?.radiusMiles !== undefined && options.radiusMiles > 0) {
+    params.set('distance', String(options.radiusMiles));
+  }
   return `${searchUrl}?${params.toString()}`;
 }
 
@@ -295,9 +301,16 @@ export class LinkedInAdapter implements SourceAdapter {
   async search(
     keywords: string,
     location: string,
-    options?: LinkedInSearchOptions,
+    options?: SearchOptions,
   ): Promise<RawPosting[]> {
-    const url = buildSearchUrl(keywords, location, options);
+    const linkedInOptions: LinkedInSearchOptions = {
+      postedWithinSeconds: options?.postedWithinSeconds,
+      workplaceType: options?.workplaceType as LinkedInWorkplaceType | undefined,
+      start: options?.start,
+      limit: options?.limit,
+      radiusMiles: options?.radiusMiles,
+    };
+    const url = buildSearchUrl(keywords, location, linkedInOptions);
     const html = await this.fetchHtml(url);
     let cards = parseSearchCards(html);
     if (options?.limit !== undefined && options.limit >= 0) {

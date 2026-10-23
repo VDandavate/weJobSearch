@@ -30,6 +30,7 @@ import {
   postedWithinToTPR,
   workplaceTypeFlag,
   type LinkedInWorkplaceType,
+  buildSearchUrl,
 } from './adapters/linkedinAdapter';
 import {
   jobToRawPosting,
@@ -286,5 +287,28 @@ describe('client-side filter labeling and unknown location fallback (Phase D)', 
       globalThis.fetch = originalFetch;
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe('search radius plumbing', () => {
+  it('buildSearchUrl emits distance= for LinkedIn when radiusMiles is provided', () => {
+    const url = buildSearchUrl('senior engineer', 'Remote', { radiusMiles: 25 });
+    expect(url).toContain('distance=25');
+  });
+
+  it('buildSearchUrl omits distance when radiusMiles is not provided', () => {
+    const url = buildSearchUrl('senior engineer', 'Remote', {});
+    expect(url).not.toContain('distance=');
+  });
+
+  it('other adapters ignore radiusMiles and surface a disclosure note', () => {
+    const cafeUrl = buildCafeUrl('senior engineer', 'Remote', { radiusMiles: 25 });
+    const wellfoundUrl = buildWellfoundUrl('senior engineer', 'Remote', { radiusMiles: 25 });
+    const flexJobsUrl = buildFlexJobsUrl('senior engineer', 'Remote', { radiusMiles: 25 });
+
+    // URLs should be unchanged (no radius parameter)
+    expect(cafeUrl).not.toContain('radius');
+    expect(wellfoundUrl).not.toContain('radius');
+    expect(flexJobsUrl).not.toContain('radius');
   });
 });

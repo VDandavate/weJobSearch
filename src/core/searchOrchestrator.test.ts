@@ -183,6 +183,29 @@ describe('runSearchBatch', () => {
     });
   });
 
+  it('passes radiusMiles to the registry and a stub adapter receives it', async () => {
+    await withSandbox(async (paths) => {
+      const received: { keywords: string; location: string; radiusMiles?: number }[] = [];
+      class RadiusStub implements SourceAdapter {
+        readonly sourceName = 'radiusStub';
+        async search(keywords: string, location: string, options?: { radiusMiles?: number }): Promise<RawPosting[]> {
+          received.push({ keywords, location, radiusMiles: options?.radiusMiles });
+          return [];
+        }
+      }
+      const registry = new JobSpyAdapterRegistry();
+      registry.register(new RadiusStub(), undefined, new RateLimiter({ sourceName: 'radiusStub' }));
+
+      await runSearchBatch('engineer', 'Remote', {
+        registry,
+        dataRoot: paths.dir,
+      }, { radiusMiles: 25 });
+
+      expect(received).toHaveLength(1);
+      expect(received[0].radiusMiles).toBe(25);
+    });
+  });
+
   it('persists a 300-posting batch with one history write and does not fork a within-batch duplicate', async () => {
     await withSandbox(async (paths) => {
       const postings: RawPosting[] = [];

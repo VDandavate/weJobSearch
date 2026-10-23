@@ -1,7 +1,7 @@
 import { type RateLimiter } from '../rateLimiter';
 import { fetchBoundedText } from '../httpFetcher';
 import { extractNextDataJson, tokenize, trimText } from '../htmlUtils';
-import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique built fresh from direct research (SDD Requirement 8, row 6)
 // during Step 3f, using the same accepted-risk discipline as the other five
@@ -170,7 +170,7 @@ export function collectJobRecords(parsed: unknown): FlexJobsJobRecord[] {
   return records;
 }
 
-export function buildListingUrl(keywords: string, location: string): string {
+export function buildListingUrl(keywords: string, location: string, options?: SearchOptions): string {
   return `${flexJobsBaseUrl}/${flexJobsListingPath}`;
 }
 
@@ -255,7 +255,7 @@ export class FlexJobsAdapter implements SourceAdapter {
     this.limiter = limiter;
   }
 
-  async search(keywords: string, location: string): Promise<RawPosting[]> {
+  async search(keywords: string, location: string, options?: SearchOptions): Promise<RawPosting[]> {
     console.warn(flexJobsClientSideFilterWarning);
     const listingUrl = buildListingUrl(keywords, location);
     const html = await this.fetchHtml(listingUrl);

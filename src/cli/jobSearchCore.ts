@@ -587,7 +587,8 @@ async function runProfileFallbackSearch(args: ParsedSearchArgs): Promise<CliDisp
   const sourceSummary = results
     .map((sourceResult) => {
       const failure = sourceResult.error !== null ? ` (failed: ${sourceResult.error.message})` : '';
-      return `  ${sourceResult.sourceName}: ${sourceResult.postings.length} posting(s)${failure}`;
+      const disclosure = sourceResult.disclosureNote ? ` [${sourceResult.disclosureNote}]` : '';
+      return `  ${sourceResult.sourceName}: ${sourceResult.postings.length} posting(s)${failure}${disclosure}`;
     })
     .join('\n');
   const lines: string[] = [
@@ -640,6 +641,7 @@ export async function runSearchCommand(args: ParsedSearchArgs): Promise<CliDispa
         minFit: args.minFit,
         minSalary: args.minSalary,
         maxAgeDays: args.maxAgeDays,
+        radiusMiles: args.radiusMiles,
       },
     );
   } catch (error) {
@@ -658,7 +660,8 @@ export async function runSearchCommand(args: ParsedSearchArgs): Promise<CliDispa
   const sourceSummary = results
     .map((sourceResult) => {
       const failure = sourceResult.error !== null ? ` (failed: ${sourceResult.error.message})` : '';
-      return `  ${sourceResult.sourceName}: ${sourceResult.postings.length} posting(s)${failure}`;
+      const disclosure = sourceResult.disclosureNote ? ` [${sourceResult.disclosureNote}]` : '';
+      return `  ${sourceResult.sourceName}: ${sourceResult.postings.length} posting(s)${failure}${disclosure}`;
     })
     .join('\n');
   const activeFilters: string[] = [];
@@ -733,7 +736,8 @@ export async function runDigestCommand(args: ParsedDigestArgs): Promise<CliDispa
   const sourceSummary = results
     .map((sourceResult) => {
       const failure = sourceResult.error !== null ? ` (failed: ${sourceResult.error.message})` : '';
-      return `  ${sourceResult.sourceName}: ${sourceResult.postings.length} posting(s)${failure}`;
+      const disclosure = sourceResult.disclosureNote ? ` [${sourceResult.disclosureNote}]` : '';
+      return `  ${sourceResult.sourceName}: ${sourceResult.postings.length} posting(s)${failure}${disclosure}`;
     })
     .join('\n');
   const lines: string[] = [

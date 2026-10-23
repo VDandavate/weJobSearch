@@ -90,6 +90,7 @@ export interface ParsedSearchArgs {
   minFit?: number;
   minSalary?: number;
   maxAgeDays?: number;
+  radiusMiles?: number;
   registry?: JobSpyAdapterRegistry;
   help?: boolean;
 }
@@ -248,8 +249,8 @@ function parseNumericOption(flag: string, value: string): number {
   }
   return parsedValue;
 }
-
-export function parseSearchArgs(args: readonly string[]): ParsedSearchArgs {  const parsed: ParsedSearchArgs = {};
+export function parseSearchArgs(args: readonly string[]): ParsedSearchArgs {
+  const parsed: ParsedSearchArgs = {};
   scanCliTokens(args, {
     onHelp: () => { parsed.help = true; },
     onFlag: (name) => {
@@ -265,6 +266,14 @@ export function parseSearchArgs(args: readonly string[]): ParsedSearchArgs {  co
         case 'minFit': parsed.minFit = parseNumericOption('--minFit', value); break;
         case 'minSalary': parsed.minSalary = parseNumericOption('--minSalary', value); break;
         case 'maxAgeDays': parsed.maxAgeDays = parseNumericOption('--maxAgeDays', value); break;
+        case 'radiusMiles': {
+          const radiusValue = parseNumericOption('--radiusMiles', value);
+          if (radiusValue <= 0) {
+            throw new Error(`Invalid --radiusMiles value '${value}': must be a positive integer.`);
+          }
+          parsed.radiusMiles = radiusValue;
+          break;
+        }
         default: break;
       }
     },

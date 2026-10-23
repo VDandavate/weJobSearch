@@ -153,7 +153,7 @@ export function buildCoverLetterMarkdown(
   const date = new Date().toISOString().slice(0, 10);
   const header = [
     `${binding.cityState} | ${binding.email} | ${binding.phone}`,
-    [binding.linkedIn, binding.portfolio].filter((value) => value.length > 0).join(' | '),
+    [binding.linkedIn, binding.portfolio].filter((value) => value !== undefined && value.length > 0).join(' | '),
   ].filter((line) => line.length > 0);
 
   const lines: string[] = [];
