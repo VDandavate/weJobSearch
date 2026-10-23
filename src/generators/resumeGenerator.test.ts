@@ -312,6 +312,30 @@ x
   });
 });
 
+describe('optional contact fields', () => {
+  function profileWithoutContactLinks(): ReturnType<typeof parseMasterProfile> {
+    const markdown = profileMarkdown
+      .replace('- LinkedIn: https://linkedin.com/in/janedoe\n', '')
+      .replace('- Portfolio: https://janedoe.dev\n', '');
+    return parseMasterProfile(markdown);
+  }
+
+  it('omits empty linkedIn and portfolio from the binding and the serialized profile', () => {
+    const binding = mapProfileToBinding(profileWithoutContactLinks());
+    expect(binding).not.toHaveProperty('linkedIn');
+    expect(binding).not.toHaveProperty('portfolio');
+    const typst = serializeBinding(binding);
+    expect(typst).not.toContain('linkedIn:');
+    expect(typst).not.toContain('portfolio:');
+  });
+
+  it('keeps a populated linkedIn and portfolio', () => {
+    const typst = serializeBinding(bindingFor());
+    expect(typst).toContain('linkedIn: "https://linkedin.com/in/janedoe"');
+    expect(typst).toContain('portfolio: "https://janedoe.dev"');
+  });
+});
+
 describe('serializeBinding', () => {
   it('emits a parseable Typst #let profile = (...) assignment', () => {
     const typst = serializeBinding(bindingFor());

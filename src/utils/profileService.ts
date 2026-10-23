@@ -152,8 +152,6 @@ const requiredMasterProfileFields: readonly string[] = [
   'contact.email',
   'contact.phone',
   'contact.cityState',
-  'contact.linkedIn',
-  'contact.portfolio',
   'workAuthorization.usCitizen',
   'workAuthorization.requiresSponsorship',
   'workAuthorization.clearance',
@@ -164,8 +162,6 @@ const requiredWizardMasterProfileFields: readonly string[] = [
   'contact.email',
   'contact.phone',
   'contact.cityState',
-  'contact.linkedIn',
-  'contact.portfolio',
   'workAuthorization.usCitizen',
   'workAuthorization.requiresSponsorship',
   'workAuthorization.clearance',
@@ -388,6 +384,9 @@ export type SerializedMasterProfile = Omit<ParsedMasterProfile, 'rawText'>;
 
 export interface InspectedProfileState {
   configured: boolean;
+  // Resolved canonical data root these files were read from, so the caller can
+  // show the user where their data lives without guessing.
+  dataRoot: string;
   incompleteReasons: string[];
   // Present only when the profile is entirely absent (no real profile file
   // exists at all). Structured first-run guidance (EUO-11): concrete next
@@ -612,6 +611,7 @@ export async function readUserProfile(
 
   const state: InspectedProfileState = {
     configured,
+    dataRoot: paths.dataRoot,
     incompleteReasons,
     onboardingSteps,
     setupState,

@@ -124,6 +124,13 @@ describe('readUserProfile', () => {
     });
   });
 
+  it('reports the resolved data root', async () => {
+    await withEmptyProfileDir(async (root) => {
+      const state = await readUserProfile(overridesFor(root));
+      expect(state.dataRoot).toBe(root);
+    });
+  });
+
   it('flags a placeholder masterProfile as unconfigured without throwing', async () => {
     await withEmptyProfileDir(async (root) => {
       const path = join(root, 'profile', 'masterProfile.md');
@@ -726,6 +733,46 @@ describe('validateProfileCompletion (H2)', () => {
   it('returns empty array for a complete payload', () => {
     const issues = validateProfileCompletion(syntheticProfile);
     expect(issues).toEqual([]);
+  });
+
+  it('accepts an empty linkedIn and portfolio because both are optional', () => {
+    const optionalContacts = {
+      ...syntheticProfile,
+      masterProfile: {
+        ...syntheticProfile.masterProfile,
+        contact: {
+          ...syntheticProfile.masterProfile.contact,
+          linkedIn: '',
+          portfolio: '',
+        },
+      },
+    };
+    expect(validateProfileCompletion(optionalContacts)).toEqual([]);
+  });
+
+  it('initializes with optional contact fields empty and writes all four profile files', async () => {
+    await withEmptyProfileDir(async (root) => {
+      const optionalContacts = {
+        ...syntheticProfile,
+        masterProfile: {
+          ...syntheticProfile.masterProfile,
+          contact: {
+            ...syntheticProfile.masterProfile.contact,
+            linkedIn: '',
+            portfolio: '',
+          },
+        },
+      };
+      await initializeUserProfile(optionalContacts, {
+        confirmed: true,
+        paths: overridesFor(root),
+      });
+      for (const path of Object.values(joinedPaths(root))) {
+        await expect(stat(path)).resolves.toBeDefined();
+      }
+      const master = await readFile(joinedPaths(root).masterProfile, 'utf8');
+      expect(master).toContain('Jane Sample');
+    });
   });
 
   it('blocks completion when required contact fields have placeholders', () => {
