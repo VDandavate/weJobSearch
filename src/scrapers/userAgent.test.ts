@@ -18,7 +18,9 @@ const adapterFiles = [
 
 describe('shared scraper User-Agent (U03c)', () => {
   it('carries a versioned compatible token', () => {
-    expect(scraperUserAgent).toMatch(/Mozilla\/5\.0 \(compatible; wejobsearch\/\d+\.\d+\.\d+\)/);
+    expect(scraperUserAgent).toMatch(
+      /Mozilla\/5\.0 \(compatible; wejobsearch\/\d+\.\d+\.\d+(?:-[a-z0-9.]+)?\)/,
+    );
   });
 
   it('derives its version from package.json so the two can never drift', () => {

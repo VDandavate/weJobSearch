@@ -110,6 +110,45 @@ describe('buildAgentConfigs', () => {
   });
 });
 
+describe('setup command contract', () => {
+  it('generates a setup command that anchors on the SDD', () => {
+    const commands = buildClaudeCommandsText();
+    expect(Object.keys(commands)).toContain('setup');
+    expect(commands.setup).toContain('docs/weJobSearch-SDD.md');
+  });
+
+  it('names the MCP tools in flow order', () => {
+    const body = buildClaudeCommandsText().setup.split('## Command: setup')[1] ?? '';
+    const flowOrder = [
+      'getUserProfile',
+      'ingestDocuments',
+      'initializeUserProfile',
+      'updateUserProfile',
+      'searchByProfile',
+      'searchJobPostings',
+    ];
+    const positions = flowOrder.map((toolName) => body.indexOf(toolName));
+    positions.forEach((position, index) => {
+      expect(position, `${flowOrder[index]} missing from the setup command`).toBeGreaterThanOrEqual(0);
+    });
+    expect([...positions].sort((left, right) => left - right)).toEqual(positions);
+  });
+
+  it('states the no-write-before-confirmation rule', () => {
+    const body = (buildClaudeCommandsText().setup.split('## Command: setup')[1] ?? '').replace(/\s+/g, ' ');
+    expect(body).toContain(
+      'Do not write, create, or modify any profile file before the user confirms the preview.',
+    );
+  });
+
+  it('states the offer-dont-run rule for the first search', () => {
+    const body = (buildClaudeCommandsText().setup.split('## Command: setup')[1] ?? '').replace(/\s+/g, ' ');
+    expect(body).toContain(
+      'Never start the search on your own; offer it and wait for an explicit yes.',
+    );
+  });
+});
+
 describe('generated config contract (cleanup Phase 7d)', () => {
   function repoRoot(): string {
     return resolve(__dirname, '..', '..');
@@ -151,6 +190,11 @@ describe('generated config contract (cleanup Phase 7d)', () => {
     const commands = buildClaudeCommandsText();
     for (const [name, body] of Object.entries(commands)) {
       const invocation = body.match(/node dist\/cli\/jobSearchCore\.js([^\n`]*)/);
+      if (name === 'setup') {
+        // Setup is prompt-only: it orchestrates MCP tools and never invokes the CLI.
+        expect(invocation, 'setup.md must not invoke the CLI').toBeNull();
+        continue;
+      }
       expect(invocation, `${name}.md has no CLI invocation`).not.toBeNull();
       const target = (invocation?.[1] ?? '').trim().split(/\s+/)[0] ?? '';
       if (name === 'help') {

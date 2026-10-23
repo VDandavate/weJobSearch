@@ -83,6 +83,9 @@ Hard rules that apply to every change, with no exceptions:
 
 8. Strict data-root confinement. The tool never reads or writes outside the resolved data root. Users stage files by copying into ~/Documents/weJobSearch/<username>/documents/ via the OS; the engine resolves the root through canonicalDataRoot.ts, and the only relocation mechanisms are --dataRoot and WEJOBSEARCHDATAROOT — both move the entire root, never a single file path. No CLI or MCP schema accepts a per-file path override; all filenames are fixed (masterProfile.md, jobPreferences.yaml, screeningAnswers.json, networkingContacts.json, resumeVariants.yaml, applicationHistory.json). Templates resolve through a fixed allowlist (shipped templates/ and <dataRoot>/templates/ only, via resolveTemplatePath). Report file output is redacted by default with a terminal warning; profile completion blocks on required-field placeholders.
 
+First-run setup: run the \`setup\` command. Hosts without command files read
+\`.claude/commands/setup.md\` and follow it.
+
 Follow the numbered build sequence in AGENTS.md; do not skip ahead. Test only
 against fixtures/, never against real profile/ or canonical-root data files.`;
 
@@ -141,8 +144,92 @@ The command may read files and write only its documented output. Report tool
 errors verbatim; never expose secrets or personal profile content.`;
 }
 
+// Setup is prompt-only: it orchestrates the existing MCP profile tools and
+// never invokes the CLI. The flow is the deliverable, so each step is explicit.
+export function buildSetupCommand(): string {
+  return `${sharedBaseRules}
+
+
+## Command: setup
+
+First-run onboarding and configuration. Work through these steps in order; do
+not skip ahead, and do not chain into any other capability.
+
+1. Inspect. Call getUserProfile. Print the resolved data root and this file map:
+   masterProfile.md (profile), jobPreferences.yaml (compensation, clearance,
+   non-negotiables, locations, target roles, radius), screeningAnswers.json
+   (portal answers), networkingContacts.json (contacts and referrals),
+   resumeVariants.yaml (resume variants), savedSearches.json and
+   searchHistory.json (search records), applications/applicationHistory.json
+   (application tracking), documents/ (source documents), previews/ and
+   templates/. If every profile file is already configured, show what is set
+   and offer section-by-section updates instead of starting over. Relocation is
+   opt-in through --dataRoot or WEJOBSEARCHDATAROOT only; never move existing
+   data.
+
+2. Documents. Ask which folder or folders hold the user's resumes. Call
+   ingestDocuments once per folder (top-level scan only). Name every
+   unreadable, empty, or image-only file. Ask for another file or for the
+   details to be typed. Never invent content for a file you could not read. If
+   the user has no documents, run the rest of this flow as an interview.
+
+3. Profile draft. Propose masterProfile.md sections: contact, work
+   authorization, summary, skills, experience, education, certifications. Show
+   the draft and let the user correct each section. linkedIn and portfolio may
+   be left empty.
+
+4. Target roles. Ask which role titles to search for, using the reviewed draft
+   as context. The user may type any list.
+
+5. Locations. Ask for preferred locations as free text (Remote, Hybrid East
+   Coast US, a city, or a ZIP code inside the location string). If the user
+   names a metro, offer an optional radius in miles. The radius is applied only
+   to LinkedIn. hiring.cafe uses path slugs, Wellfound has no radius parameter,
+   Built In's allowed listing has none, Welcome to the Jungle uses sitemaps,
+   and FlexJobs ignores query parameters. State this plainly instead of
+   implying a global distance filter.
+
+6. Clearance, then compensation, then work authorization. Clearance status is
+   none, interim, active, or expired; level is publicTrust, secret, topSecret,
+   tsSci, or null; ask eligibility to obtain and whether sponsorship is needed.
+   Ask the compensation floor and target in the user's currency, and whether
+   bonus and equity count toward the floor.
+
+7. Non-negotiables. Propose noRelocation, noStaffingAgencies,
+   clearanceMismatch, and belowMinSalary as reject-intent rules. Offer
+   remoteOnly (wording that names manualReview) only if noRelocation is
+   declined, never both. Every rule can be switched off, and an empty list is
+   valid.
+
+8. Screening answers. Derive work authorization and compensation from the
+   earlier answers; never ask the same question twice. Ask only the notice
+   period, per-skill years for skills present in the profile, and sponsorship
+   type when sponsorship is required.
+
+9. Preview and confirm. Show every file that will be written, and a diff for
+   any file that already exists. Do not write, create, or modify any profile
+   file before the user confirms the preview. On confirmation, call
+   initializeUserProfile with confirmed: true on a first run, or updateUserProfile
+   with only the changed sections on a re-run. Never write a real profile file
+   into the repository.
+
+10. Health check. Run the setup check (npm run setup) and report Node, Typst,
+    and configuration status. A configuration schema error stops here and is
+    reported verbatim. A missing Typst binary is a warning only.
+
+11. First search. Never start the search on your own; offer it and wait for an
+    explicit yes. On yes, call searchByProfile when target roles exist;
+    otherwise ask for keywords and call searchJobPostings. Apply no filters
+    unless the user asks. After the results, offer to save the search, defaulting
+    to no.
+
+12. Stop. Print next steps and the command menu. Do not generate a resume,
+    cover letter, or outreach message, and do not confirm an application.`;
+}
+
 export function buildClaudeCommandsText(): Record<string, string> {
   return {
+    setup: buildSetupCommand(),
     generate: buildClaudeCommand(
       'generate',
       'Generate a tailored 1-page resume (Typst to PDF) for one target role, grounded in masterProfile.md with EEO enforcement and ATS verification.',

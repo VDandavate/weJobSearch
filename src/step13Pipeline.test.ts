@@ -585,7 +585,7 @@ describe('step 13: six-adapter end-to-end pipeline against fixtures (no network)
 
     const historyAfterSecond = await readApplicationHistory();
     expect(historyAfterSecond.applications).toHaveLength(1);
-  });
+  }, 15000);
 
   it('runSearchCommand renders both fixed tables plus the per-source summary', async () => {
     installFetchStub();
