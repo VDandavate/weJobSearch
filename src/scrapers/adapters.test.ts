@@ -259,7 +259,10 @@ describe('client-side filter labeling and unknown location fallback (Phase D)', 
   });
 
   it('welcomeToTheJungle search emits the user-visible warning before fetching', async () => {
-    const { WelcomeToTheJungleAdapter } = await import('./adapters/welcomeToTheJungleAdapter');
+    const { WelcomeToTheJungleAdapter, resetSitemapIndexCacheForTests } = await import(
+      './adapters/welcomeToTheJungleAdapter'
+    );
+    resetSitemapIndexCacheForTests();
     const { RateLimiter } = await import('./rateLimiter');
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => {
@@ -275,8 +278,9 @@ describe('client-side filter labeling and unknown location fallback (Phase D)', 
           respectRobotsTxt: false,
         }),
       );
-      // The sitemap fetch fails under the stub, but the warning fires first.
-      await expect(adapter.search('engineer', 'Remote')).rejects.toThrow();
+      // A covered location reaches the sitemap fetch, which fails under the
+      // stub; the warning still fires first.
+      await expect(adapter.search('engineer', 'Paris')).rejects.toThrow();
       expect(warnSpy).toHaveBeenCalledWith(welcomeToTheJungleClientSideFilterWarning);
     } finally {
       globalThis.fetch = originalFetch;

@@ -697,7 +697,7 @@ bot-detection bypass:
 | LinkedIn | `src/scrapers/adapters/linkedinAdapter.ts` | **Accepted risk.** LinkedIn's ToS prohibits automated access; we proceed anyway, deliberately and with your explicit sign-off, using only public unauthenticated search/detail endpoints. Conservative rate limiting. |
 | hiring.cafe | `src/scrapers/adapters/hiringCafeAdapter.ts` | Low-risk free scrape; only public listing pages; robots.txt respected. |
 | Wellfound | `src/scrapers/adapters/wellfoundAdapter.ts` | **Accepted risk.** Wellfound's Talent General terms exclude scraping; we use only public unauthenticated `/role/` pages (first page). |
-| Welcome to the Jungle | `src/scrapers/adapters/welcomeToTheJungleAdapter.ts` | **Accepted risk.** WTTJ CGUs prohibit automated extraction. We use robots-allowed sitemaps and server-rendered detail pages only. |
+| Welcome to the Jungle | `src/scrapers/adapters/welcomeToTheJungleAdapter.ts` | **Accepted risk.** WTTJ CGUs prohibit automated extraction. We use robots-allowed sitemaps and server-rendered detail pages only. WTTJ is EU/city-oriented: a remote/work-mode or non-European location returns zero results without fetching, because those terms cannot appear in its city-based job slugs. |
 | Built In | `src/scrapers/adapters/builtInAdapter.ts` | **Accepted risk.** Built In's Community ToU prohibit bots/scraping; we stay on robots-sitemap-listed paths. |
 | FlexJobs | `src/scrapers/adapters/flexJobsAdapter.ts` | **Accepted risk.** FlexJobs' ToS prohibit bots and scraping. This adapter is the most conservative (4-5s delay), stays on the public `/remote-jobs` listing page, and may only expose ~200-character *teaser* cards because full descriptions and applying are paywalled. |
 

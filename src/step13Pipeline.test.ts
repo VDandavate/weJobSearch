@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   runSearchCommand,
@@ -95,10 +94,6 @@ afterEach(() => {
 // Synthetic fixture builders, matched to each adapter's parser.
 // ---------------------------------------------------------------------------
 
-function gzipXml(xml: string): Uint8Array {
-  return gzipSync(Buffer.from(xml, 'utf8'));
-}
-
 function linkedInSearchHtml(cards: Array<{ id: string; title: string; company: string; location: string }>): string {
   const cardHtml = cards
     .map(
@@ -148,12 +143,6 @@ function wellfoundListingHtml(data: Record<string, unknown>): string {
       props: { pageProps: { apolloState: { data } } },
     })}</script></html>`
   );
-}
-
-function wttjDetailHtml(jobObject: Record<string, unknown>): string {
-  const innerJson = JSON.stringify({ queries: [{ state: { data: jobObject } }] });
-  const outerLiteral = JSON.stringify(innerJson).slice(1, -1);
-  return `<!doctype html><html><body><script>window.__INITIAL_DATA__ = "${outerLiteral}"\nwindow.__TRAILER__ = 1;</script></body></html>`;
 }
 
 function builtInListingHtml(): string {
@@ -313,41 +302,9 @@ function installSearchRoutes(): void {
     }),
   );
 
-  // Welcome to the Jungle: sitemap index -> one job sitemap -> one detail page
-  // whose salary is EUR. The EUR salary is incomparable to the USD-configured
-  // minimum (currency-mismatch manualReview) only when a compensation
-  // nonNegotiable is configured; this pipeline runs neutral v0.2.1 defaults
-  // with empty nonNegotiables, so the compensation rule is never evaluated and
-  // the posting proves the EUR fixture parses end to end as strongFit.
-  route(
-    (url) => url === 'https://www.welcometothejungle.com/sitemaps/index.xml.gz',
-    gzipXml(
-      '<sitemapindex><sitemap><loc>https://www.welcometothejungle.com/sitemaps/job-listings.1.xml.gz</loc></sitemap></sitemapindex>',
-    ),
-  );
-  route(
-    (url) => url === 'https://www.welcometothejungle.com/sitemaps/job-listings.1.xml.gz',
-    gzipXml(
-      '<urlset><url><loc>https://www.welcometothejungle.com/en/companies/paransi/jobs/remote-senior-platform-engineer</loc><lastmod>2026-07-01</lastmod></url></urlset>',
-    ),
-  );
-  route(
-    (url) => url.includes('/en/companies/paransi/jobs/'),
-    wttjDetailHtml({
-      name: 'Senior Platform Engineer',
-      slug: 'remote-senior-platform-engineer',
-      description: 'We are looking for a Senior Platform Engineer to join the platform team.',
-      ['published_at']: '2026-07-01T00:00:00Z',
-      remote: 'Full remote',
-      ['contract_type']: 'CDI',
-      office: { address: 'Remote' },
-      ['salary_currency']: 'EUR',
-      ['salary_min']: 55000,
-      ['salary_max']: 65000,
-      ['salary_period']: 'year',
-      organization: { name: 'Paransi', slug: 'paransi', ['website_organization']: { slug: 'paransi' } },
-    }),
-  );
+  // Welcome to the Jungle is intentionally unrouted here: a work-mode query
+  // short-circuits before any sitemap fetch. Its covered-location path is
+  // covered by src/scrapers/wttjShortCircuit.test.ts.
 
   // Built In: one listing with two job anchors; one strong USD-paid detail,
   // one weak-fit detail (missing Swift + Healthcare domain, still USD-paid so
@@ -451,27 +408,33 @@ describe('step 13: six-adapter end-to-end pipeline against fixtures (no network)
       registry,
     });
 
-    // Every one of the six registered sources produced postings.
+    // All six registered sources ran. Five produced postings; WTTJ short-circuits
+    // a work-mode query by design (its sitemap is EU-city-oriented), so a
+    // 'Remote' request returns zero without touching the network.
     expect(outcome.results).toHaveLength(6);
     expect(outcome.results.map((source) => source.sourceName).sort()).toEqual(
       ['builtIn', 'flexJobs', 'hiringCafe', 'linkedin', 'welcomeToTheJungle', 'wellfound'],
     );
     for (const source of outcome.results) {
       expect(source.error).toBeNull();
-      expect(source.postings.length).toBeGreaterThan(0);
+      if (source.sourceName === 'welcomeToTheJungle') {
+        expect(source.postings).toHaveLength(0);
+      } else {
+        expect(source.postings.length).toBeGreaterThan(0);
+      }
     }
 
-    // The six sources returned 9 raw postings; dedup collapses the LevelUpLabs
-    // duplicate (hiring.cafe + linkedin) into one unique posting.
+    // The five live sources returned 8 raw postings; dedup collapses the
+    // LevelUpLabs duplicate (hiring.cafe + linkedin) into one unique posting.
     const rawCount = outcome.results.reduce((total, source) => total + source.postings.length, 0);
-    expect(rawCount).toBe(9);
-    expect(outcome.entries).toHaveLength(8);
+    expect(rawCount).toBe(8);
+    expect(outcome.entries).toHaveLength(7);
 
     const leveledUp = outcome.entries.find((entry) => entry.posting.companyName === 'LevelUpLabs');
     expect(leveledUp).toBeDefined();
 
-    // Dedup evidence against an empty history: the 9 raw postings collapse to
-    // 8 unique + 1 within-batch merge across hiringCafe and linkedin. A fresh
+    // Dedup evidence against an empty history: the 8 raw postings collapse to
+    // 7 unique + 1 within-batch merge across hiringCafe and linkedin. A fresh
     // empty history file in the SAME run directory (the history used by
     // searchJobPostings already contains those records, and the directory is
     // the confined data root for this test).
@@ -480,7 +443,7 @@ describe('step 13: six-adapter end-to-end pipeline against fixtures (no network)
     await writeFile(dedupHistoryPath, JSON.stringify({ applications: [] }), 'utf8');
     const rawPostings = outcome.results.flatMap((source) => source.postings);
     const { uniquePostings, mergedPostings } = await deduplicatePostings(rawPostings, { historyPath: dedupHistoryPath });
-    expect(uniquePostings).toHaveLength(8);
+    expect(uniquePostings).toHaveLength(7);
     expect(mergedPostings).toHaveLength(1);
     const levelUpMerge = mergedPostings.find((merge) => merge.companyName === 'LevelUpLabs');
     expect(levelUpMerge?.sourceAggregators).toEqual(expect.arrayContaining(['linkedin', 'hiringCafe']))
@@ -510,24 +473,24 @@ describe('step 13: six-adapter end-to-end pipeline against fixtures (no network)
     // neutral v0.2.1 defaults: fixtures/sampleJobPreferences.yaml ships empty
     // nonNegotiables + empty preferredLocations, and an 'unknown' location
     // never rejects — so the hard-rejection gate, the salary routing, and the
-    // staffing-agency rule all stay silent. Only Helix (posting-only Swift +
-    // Healthcare domain) drops out on deductions.
+    // staffing-agency rule all stay silent. Only Helix loses a deduction point
+    // range: its posting names Swift (missing) but states no domain cue, so the
+    // domain deduction stays silent and the score lands in manualReview (2.5).
     const byCompany = new Map(outcome.entries.map((entry) => [entry.posting.companyName, entry.assessment.fitStatus]));
     expect(byCompany.get('AcmeVent')).toBe('strongFit');
     expect(byCompany.get('LevelUpLabs')).toBe('strongFit');
     expect(byCompany.get('CircleGrid')).toBe('strongFit');
     expect(byCompany.get('NimbusCore')).toBe('strongFit');
-    expect(byCompany.get('Paransi')).toBe('strongFit');
     expect(byCompany.get('ScaleForge')).toBe('strongFit');
     expect(byCompany.get('BrightStaffing')).toBe('strongFit');
-    expect(byCompany.get('Helix')).toBe('weakFit');
+    expect(byCompany.get('Helix')).toBe('manualReview');
 
     expect(outcome.activeResults.rows).toHaveLength(7);
-    expect(outcome.excludedResults.rows).toHaveLength(1);
+    expect(outcome.excludedResults.rows).toHaveLength(0);
 
     // Persistence: every unique posting logged with status evaluated.
     const history = await readApplicationHistory();
-    expect(history.applications).toHaveLength(8);
+    expect(history.applications).toHaveLength(7);
     for (const record of history.applications) {
       expect(record.status).toBe('evaluated');
       expect(record.fitScore).toBeGreaterThanOrEqual(0);
@@ -547,16 +510,16 @@ describe('step 13: six-adapter end-to-end pipeline against fixtures (no network)
     const deps = { registry, profilePath, preferencesPath, historyPath, searchHistoryPath };
 
     const first = await searchJobPostings(keywords, location, deps);
-    expect(first.newRecords).toBe(8);
+    expect(first.newRecords).toBe(7);
     expect(first.alreadyRecorded).toBe(0);
 
     const second = await searchJobPostings(keywords, location, deps);
     expect(second.newRecords).toBe(0);
-    expect(second.alreadyRecorded).toBe(8);
-    expect(second.entries).toHaveLength(8);
+    expect(second.alreadyRecorded).toBe(7);
+    expect(second.entries).toHaveLength(7);
 
     const history = await readApplicationHistory();
-    expect(history.applications).toHaveLength(8);
+    expect(history.applications).toHaveLength(7);
     expect(second.activeResults.rows).toEqual(first.activeResults.rows);
     expect(second.excludedResults.rows).toEqual(first.excludedResults.rows);
   });
@@ -609,7 +572,6 @@ registry,
     expect(joined).toContain('| Sr. No. | Job Title | Organization | Brief | Fit Score | Justification | Link |');
     expect(joined).toContain('| Sr. No. | Job Title | Organization | Fit Score | Justification | Link |');
     expect(joined).toContain('AcmeVent');
-    expect(joined).toContain('Paransi');
   });
 
   it('reviewQueue, report, and confirmApp surface the persisted pipeline output', async () => {
@@ -626,12 +588,11 @@ registry,
     });
 
     // reviewQueue lists every manualReview application. Under neutral v0.2.1
-    // defaults (empty nonNegotiables, 'unknown' location never rejects) no
-    // stubbed posting routes to manualReview — FoggyNow included (its Python
-    // + Docker requirements are both in the fixture profile) — so the queue
-    // is correctly empty rather than listing Paransi/ScaleForge/FoggyNow.
+    // defaults only Helix routes there (missing Swift, no domain cue). FoggyNow
+    // stays strongFit: its Python + Docker requirements are both in the fixture
+    // profile.
     const queue = await getReviewQueue();
-    expect(queue).toEqual([]);
+    expect(queue.map((entry) => entry.companyName)).toEqual(['Helix']);
     const queueCommand = await runReviewQueueCommand({ help: false });
     expect(queueCommand.exitCode).toBe(0);
     expect(queueCommand.printedLines.join('\n')).toContain('manualReview');
@@ -648,16 +609,16 @@ registry,
     });
     expect(confirmedAgain.alreadyConfirmed).toBe(true);
 
-    // The funnel report reflects all of it (SDD Requirement 9): 8 searched
-    // postings + FoggyNow, all strongFit except Helix (weakFit on deductions).
+    // The funnel report reflects all of it (SDD Requirement 9): 7 searched
+    // postings + FoggyNow, all strongFit except Helix (manualReview).
     const report = await getFunnelReport({ historyPath, contactsPath, searchHistoryPath });
-    expect(report.totalApplications).toBe(9);
+    expect(report.totalApplications).toBe(8);
     expect(report.statusCounts.appliedConfirmed).toBe(1);
-    expect(report.fitStatusCounts.strongFit).toBe(8);
-    expect(report.fitStatusCounts.manualReview).toBe(0);
+    expect(report.fitStatusCounts.strongFit).toBe(7);
+    expect(report.fitStatusCounts.manualReview).toBe(1);
     expect(report.fitStatusCounts.hardRejected).toBe(0);
-    expect(report.fitStatusCounts.weakFit).toBe(1);
-    expect(report.awaitingManualReview).toEqual([]);
+    expect(report.fitStatusCounts.weakFit).toBe(0);
+    expect(report.awaitingManualReview.map((entry) => entry.companyName)).toEqual(['Helix']);
     expect(report.referralConversion.referralLinked.evaluated).toBe(1);
 
     const reportCommand = await runReportCommand({

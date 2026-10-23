@@ -1,7 +1,7 @@
 import { gunzipSync } from 'zlib';
 import { type RateLimiter } from '../rateLimiter';
 import { fetchBoundedBytes, fetchBoundedText, maxSitemapResponseBytes } from '../httpFetcher';
-import { cleanText, tokenize } from '../htmlUtils';
+import { cleanText, locationWorkMode, tokenize } from '../htmlUtils';
 import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 
 // Technique built fresh from direct site inspection (SDD Requirement 8, row 4)
@@ -41,6 +41,12 @@ import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
 // surfaced in `rawSalaryText`, unparsed and unconverted; compExtractor.ts
 // (Step 4) normalizes currencies later — never converted here.
 //
+// Coverage note: WTTJ is EU/city-oriented. Job slugs carry a European city,
+// not a US location or work mode, so `search` short-circuits before the
+// sitemap scan when the requested location is a work mode or a place outside
+// that coverage (see `wttjLocationIsReachable`). The sitemap index parse is
+// cached for the process so repeated saved searches do not re-download it.
+//
 // Markup/JSON shape notes (observed 2026-08-08):
 //   - Sitemap index lists `<sitemap><loc>...job-listings.{n}.xml.gz</loc></sitemap>`.
 //   - Job sitemaps contain `<url><loc>https://www.welcometothejungle.com/en/companies/{company}/jobs/{slug}</loc><lastmod>...</lastmod></url>`.
@@ -71,6 +77,38 @@ export const welcomeToTheJungleUnknownLocationLabel = 'unknown';
 const maxSitemaps = 6;
 const candidateCap = 60;
 const maxPostings = 20;
+
+// WTTJ job URLs are keyed by EU city slugs, so a work-mode request or a place
+// outside its coverage cannot match any candidate. Short-circuiting before the
+// sitemap scan keeps the slowest source from spending a minute and 25 MB to
+// return nothing (audit finding 17). Unknown places still proceed: the
+// adapter never guesses a non-match.
+const wttjNonCoveredLocationTokens = new Set([
+  'united', 'states', 'usa', 'us', 'america', 'canada', 'mexico', 'brazil',
+  'india', 'singapore', 'australia', 'japan', 'china', 'israel', 'uae', 'dubai',
+  'new', 'york', 'san', 'francisco', 'seattle', 'austin', 'boston', 'chicago',
+  'angeles', 'toronto', 'vancouver', 'bengaluru', 'bangalore', 'hyderabad',
+]);
+
+// The sitemap index changes rarely, so parse it once per process instead of on
+// every saved search. Only non-empty parses are cached, so a transient failure
+// is retried rather than frozen as "no sitemaps" for the process lifetime.
+const sitemapIndexCache = new Map<string, string[]>();
+
+export function resetSitemapIndexCacheForTests(): void {
+  sitemapIndexCache.clear();
+}
+
+export function wttjLocationIsReachable(location: string): boolean {
+  const requested = location.trim();
+  if (requested.length === 0) {
+    return true;
+  }
+  if (locationWorkMode(requested) !== null) {
+    return false;
+  }
+  return !tokenizeWttj(requested).some((token) => wttjNonCoveredLocationTokens.has(token));
+}
 
 export interface SitemapEntry {
   loc: string;
@@ -419,6 +457,9 @@ export class WelcomeToTheJungleAdapter implements SourceAdapter {
 
   async search(keywords: string, location: string): Promise<RawPosting[]> {
     console.warn(welcomeToTheJungleClientSideFilterWarning);
+    if (!wttjLocationIsReachable(location)) {
+      return [];
+    }
     const keywordTokens = tokenizeWttj(keywords);
     const locationTokens = tokenizeWttj(location);
     const candidates = await this.collectCandidates(locationTokens);
@@ -490,8 +531,14 @@ export class WelcomeToTheJungleAdapter implements SourceAdapter {
   }
 
   private async collectCandidates(locationTokens: string[]): Promise<string[]> {
-    const sitemapXml = await this.fetchGzipText(sitemapIndexUrl);
-    const sitemapUrls = parseSitemapIndexXml(sitemapXml);
+    let sitemapUrls = sitemapIndexCache.get(sitemapIndexUrl);
+    if (sitemapUrls === undefined) {
+      const sitemapXml = await this.fetchGzipText(sitemapIndexUrl);
+      sitemapUrls = parseSitemapIndexXml(sitemapXml);
+      if (sitemapUrls.length > 0) {
+        sitemapIndexCache.set(sitemapIndexUrl, sitemapUrls);
+      }
+    }
     const candidates: string[] = [];
     for (const sitemapUrl of sitemapUrls.slice(0, maxSitemaps)) {
       if (candidates.length >= candidateCap) {
