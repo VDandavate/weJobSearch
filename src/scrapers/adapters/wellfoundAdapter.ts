@@ -2,7 +2,7 @@ import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
 import { extractNextDataJson, trimText } from '../htmlUtils';
-import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique built fresh from public site inspection (SDD Requirement 8, row 3)
 // using the same discipline as the hiring.cafe adapter. Wellfound (formerly
@@ -96,7 +96,7 @@ export function slugifyWellfound(value: string): string {
     .replace(/^-|-$/g, '');
 }
 
-export function buildListingUrl(keywords: string, location: string): string | null {
+export function buildListingUrl(keywords: string, location: string, options?: SearchOptions): string | null {
   const roleSlug = keywords.length > 0 ? slugifyWellfound(keywords) : '';
   if (roleSlug.length === 0) {
     return null;
@@ -234,7 +234,7 @@ export class WellfoundAdapter implements SourceAdapter {
     this.limiter = limiter;
   }
 
-  async search(keywords: string, location: string): Promise<RawPosting[]> {
+  async search(keywords: string, location: string, options?: SearchOptions): Promise<RawPosting[]> {
     const url = buildListingUrl(keywords, location);
     if (url === null) {
       return [];

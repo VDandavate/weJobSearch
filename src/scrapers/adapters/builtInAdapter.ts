@@ -2,7 +2,7 @@ import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
 import { cleanText, decodeHtmlEntities, tokenize, trimText } from '../htmlUtils';
-import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique built fresh from direct site inspection (SDD Requirement 8, row 5)
 // using the same discipline as the hiring.cafe, Wellfound and Welcome to the
@@ -398,7 +398,7 @@ export class BuiltInAdapter implements SourceAdapter {
     this.limiter = limiter;
   }
 
-  async search(keywords: string, location: string): Promise<RawPosting[]> {
+  async search(keywords: string, location: string, options?: SearchOptions): Promise<RawPosting[]> {
     console.warn(builtInClientSideFilterWarning);
     const listingUrl = fillListingUrl(location);
     const listingHtml = await this.fetchHtml(listingUrl);

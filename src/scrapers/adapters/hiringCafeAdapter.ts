@@ -2,7 +2,7 @@ import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
 import { cleanText, extractNextDataJson } from '../htmlUtils';
-import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique ported fresh from public records of hiring.cafe — see SDD
 // Requirement 8 (source 2, Low risk posture) and SDD Section 1.3's
@@ -99,7 +99,7 @@ export function slugifyCafe(value: string): string {
     .replace(/^-|-$/g, '');
 }
 
-export function buildListingUrl(keywords: string, location: string): string | null {
+export function buildListingUrl(keywords: string, location: string, options?: SearchOptions): string | null {
   const querySlug = keywords.length > 0 ? slugifyCafe(keywords) : '';
   const locationSlug = location.length > 0 ? slugifyCafe(location) : '';
   if (querySlug.length === 0 && locationSlug.length === 0) {
@@ -252,7 +252,7 @@ export class HiringCafeAdapter implements SourceAdapter {
     this.limiter = limiter;
   }
 
-  async search(keywords: string, location: string): Promise<RawPosting[]> {
+  async search(keywords: string, location: string, options?: SearchOptions): Promise<RawPosting[]> {
     const url = buildListingUrl(keywords, location);
     if (url === null) {
       return [];

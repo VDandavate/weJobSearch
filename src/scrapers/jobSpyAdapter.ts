@@ -20,7 +20,7 @@ export interface RawPosting {
 
 export interface SourceAdapter {
   readonly sourceName: string;
-  search(keywords: string, location: string): Promise<RawPosting[]>;
+  search(keywords: string, location: string, options?: SearchOptions): Promise<RawPosting[]>;
   // Optional per-URL detail fetch backing the evaluate --jobUrl command
   // (SDD Requirement 2a/4.1). An adapter returns null when the URL host is not
   // its own domain (no network attempt); throws on a handled-but-failed
@@ -35,10 +35,22 @@ export interface SourceAdapter {
   canFetchPostingUrl?(url: string): boolean;
 }
 
+export interface SearchOptions {
+  radiusMiles?: number;
+  // LinkedIn-specific pagination options
+  start?: number;
+  limit?: number;
+  // LinkedIn-specific filter options
+  postedWithinSeconds?: number;
+  workplaceType?: string;
+}
+
 export interface SourceSearchResult {
   sourceName: string;
   postings: RawPosting[];
   error: Error | null;
+  // Optional disclosure note for source-specific limitations (e.g., radius not supported)
+  disclosureNote?: string;
 }
 
 // Overall search budget (C3): one source's 1+N sequential gated detail
@@ -167,7 +179,7 @@ export class JobSpyAdapterRegistry {
     sourceName: string,
     keywords: string,
     location: string,
-    options?: SearchBudgetOptions,
+    options?: SearchBudgetOptions & SearchOptions,
   ): Promise<RawPosting[]> {
     const adapter = this.adapters.get(sourceName);
     if (adapter === undefined) {
@@ -186,7 +198,7 @@ export class JobSpyAdapterRegistry {
     limiter.beginDelayEnvelope();
     try {
       const budgetMs = options?.budgetMs ?? defaultOverallSearchBudgetMs;
-      const postings = await withSearchBudget(adapter.search(keywords, location), budgetMs, sourceName);
+      const postings = await withSearchBudget(adapter.search(keywords, location, options), budgetMs, sourceName);
       // Honest success (C2): an empty parse is not a healthy batch. Markup
       // breaks that yield zero postings must not reset the breaker via
       // recordSuccess (which would also let them be cached as healthy).
@@ -212,7 +224,7 @@ export class JobSpyAdapterRegistry {
   async searchAll(
     keywords: string,
     location: string,
-    options?: SearchBudgetOptions,
+    options?: SearchBudgetOptions & SearchOptions,
   ): Promise<SourceSearchResult[]> {
     // A tripped breaker stays latched across searchAll runs until breakerTtlMs
     // elapses. The next search after the TTL supplies one trial request: success
@@ -221,14 +233,21 @@ export class JobSpyAdapterRegistry {
     // resolves as its own per-source error instead of stalling the batch.
     const deadline = Date.now() + (options?.budgetMs ?? defaultOverallSearchBudgetMs);
     const sources = this.getRegisteredSources();
+    const radiusMiles = options?.radiusMiles;
     const results = await Promise.all(
       sources.map(async (sourceName) => {
         try {
           const remainingMs = Math.max(0, deadline - Date.now());
           const postings = await this.search(sourceName, keywords, location, {
             budgetMs: remainingMs,
+            radiusMiles,
           });
-          return { sourceName, postings, error: null };
+          const result: SourceSearchResult = { sourceName, postings, error: null };
+          // Add disclosure note for sources that don't support radius
+          if (radiusMiles !== undefined && sourceName !== 'linkedin') {
+            result.disclosureNote = `Radius filter (${radiusMiles} miles) not supported by ${sourceName}; results are not distance-filtered.`;
+          }
+          return result;
         } catch (error) {
           return { sourceName, postings: [], error: error as Error };
         }

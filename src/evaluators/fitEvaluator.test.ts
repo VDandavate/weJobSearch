@@ -785,3 +785,83 @@ describe('evaluateFit: compensation preference wiring (Phase D)', () => {
     ).toBe('compliant');
   });
 });
+
+describe('jobPreferencesSchema: searchRadiusMiles', () => {
+  it('accepts optional positive searchRadiusMiles', () => {
+    const prefs = parseJobPreferences(`
+compensation:
+  currency: USD
+  minAcceptableBase: 100000
+  targetBase: 150000
+  countsBonusTowardMin: false
+  countsEquityTowardMin: false
+clearance:
+  currentStatus: none
+  currentLevel: null
+  eligibleToObtain: false
+  requiresSponsorshipForVisa: false
+nonNegotiables: []
+preferredLocations:
+  - Remote
+searchRadiusMiles: 25
+`);
+    expect(prefs.searchRadiusMiles).toBe(25);
+  });
+
+  it('rejects non-positive searchRadiusMiles', () => {
+    expect(() => parseJobPreferences(`
+compensation:
+  currency: USD
+  minAcceptableBase: 100000
+  targetBase: 150000
+  countsBonusTowardMin: false
+  countsEquityTowardMin: false
+clearance:
+  currentStatus: none
+  currentLevel: null
+  eligibleToObtain: false
+  requiresSponsorshipForVisa: false
+nonNegotiables: []
+preferredLocations:
+  - Remote
+searchRadiusMiles: 0
+`)).toThrow();
+    expect(() => parseJobPreferences(`
+compensation:
+  currency: USD
+  minAcceptableBase: 100000
+  targetBase: 150000
+  countsBonusTowardMin: false
+  countsEquityTowardMin: false
+clearance:
+  currentStatus: none
+  currentLevel: null
+  eligibleToObtain: false
+  requiresSponsorshipForVisa: false
+nonNegotiables: []
+preferredLocations:
+  - Remote
+searchRadiusMiles: -5
+`)).toThrow();
+  });
+
+  it('omits searchRadiusMiles when not provided', () => {
+    const prefs = parseJobPreferences(`
+compensation:
+  currency: USD
+  minAcceptableBase: 100000
+  targetBase: 150000
+  countsBonusTowardMin: false
+  countsEquityTowardMin: false
+clearance:
+  currentStatus: none
+  currentLevel: null
+  eligibleToObtain: false
+  requiresSponsorshipForVisa: false
+nonNegotiables: []
+preferredLocations:
+  - Remote
+`);
+    expect(prefs.searchRadiusMiles).toBeUndefined();
+  });
+});

@@ -1947,4 +1947,23 @@ describe('searchJobPostings filter forwarding (U44)', () => {
       }
     });
   });
+
+  it('forwards radiusMiles to the core search filters', async () => {
+    await withSandbox(async (paths) => {
+      const registry = makeRegistry([{ name: 'stubAlpha', postings: [posting()] }]);
+      const connected = await connectToServer(paths, registry);
+      try {
+        const result = await callTool(connected, 'searchJobPostings', {
+          keywords: 'staff engineer',
+          location: 'Remote',
+          radiusMiles: 25,
+        });
+        expect(result.isError).toBe(false);
+        const payload = JSON.parse(result.text) as { evaluatedCount: number };
+        expect(payload.evaluatedCount).toBe(1);
+      } finally {
+        await connected.close();
+      }
+    });
+  });
 });

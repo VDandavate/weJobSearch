@@ -175,6 +175,29 @@ describe('runSearchBatch', () => {
       expect(history.applications).toHaveLength(1);
     });
   });
+
+  it('passes radiusMiles to the registry and a stub adapter receives it', async () => {
+    await withSandbox(async (paths) => {
+      const received: { keywords: string; location: string; radiusMiles?: number }[] = [];
+      class RadiusStub implements SourceAdapter {
+        readonly sourceName = 'radiusStub';
+        async search(keywords: string, location: string, options?: { radiusMiles?: number }): Promise<RawPosting[]> {
+          received.push({ keywords, location, radiusMiles: options?.radiusMiles });
+          return [];
+        }
+      }
+      const registry = new JobSpyAdapterRegistry();
+      registry.register(new RadiusStub(), undefined, new RateLimiter({ sourceName: 'radiusStub' }));
+
+      await runSearchBatch('engineer', 'Remote', {
+        registry,
+        dataRoot: paths.dir,
+      }, { radiusMiles: 25 });
+
+      expect(received).toHaveLength(1);
+      expect(received[0].radiusMiles).toBe(25);
+    });
+  });
 });
 
 describe('evaluateJobPosting', () => {

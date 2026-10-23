@@ -94,6 +94,9 @@ export const jobPreferencesSchema = z.object({
   // Search-result cache freshness window in minutes (SRA-06). Optional: when
   // absent, searchCache.ts falls back to its documented default (30 min).
   searchCacheTtlMinutes: z.number().int().positive().optional(),
+  // Search radius in miles (optional). Only honored by LinkedIn; other sources
+  // disclose they ignore it. Positive integer.
+  searchRadiusMiles: z.number().int().positive().optional(),
 });
 
 export type NonNegotiable = z.infer<typeof nonNegotiableSchema>;

@@ -31,7 +31,7 @@ These apply to every file you create or edit, with no exceptions:
 npm install            # needs Node >= 24 (.nvmrc pins 26.5.0)
 npm run build          # tsc -> dist/ (dist/ is gitignored; required before CLI/MCP runs)
 npm run lint           # tsc --noEmit (typecheck, no output)
-npm test               # vitest run (all suites; 944 tests / 59 files in this baseline)
+npm test               # vitest run (all suites; 954 tests / 59 files in this baseline)
 npx vitest run src/evaluators/fitEvaluator.test.ts   # single file
 npm run namingLinter   # naming gate; works on a fresh clone without build (Node 24+ type stripping)
 npm run setupHooks     # one-time per clone: git config core.hooksPath .githooks (pre-commit naming gate)

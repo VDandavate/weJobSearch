@@ -365,6 +365,11 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
           .number()
           .optional()
           .describe('Show only postings posted within this many days; postings without a posted date are kept (optional).'),
+        radiusMiles: z
+          .number()
+          .positive()
+          .optional()
+          .describe('Search radius in miles (optional; only honored by LinkedIn; other sources disclose they ignore it).'),
       },
     },
     async (args) => {
@@ -380,6 +385,7 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
           minFit: args.minFit,
           minSalary: args.minSalary,
           maxAgeDays: args.maxAgeDays,
+          radiusMiles: args.radiusMiles,
         },
       );
       return {

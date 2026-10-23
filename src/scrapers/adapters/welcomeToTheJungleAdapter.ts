@@ -3,7 +3,7 @@ import { HttpStatusError, type RateLimiter } from '../rateLimiter';
 import { defaultRequestTimeoutMs as requestTimeoutMs } from '../requestTimeout';
 import { scraperUserAgent } from '../userAgent';
 import { cleanText, tokenize } from '../htmlUtils';
-import type { RawPosting, SourceAdapter } from '../jobSpyAdapter';
+import type { RawPosting, SourceAdapter, SearchOptions } from '../jobSpyAdapter';
 
 // Technique built fresh from direct site inspection (SDD Requirement 8, row 4)
 // per the user's Step 3d decision, mirroring the hiring.cafe and Wellfound
@@ -419,7 +419,7 @@ export class WelcomeToTheJungleAdapter implements SourceAdapter {
     this.limiter = limiter;
   }
 
-  async search(keywords: string, location: string): Promise<RawPosting[]> {
+  async search(keywords: string, location: string, options?: SearchOptions): Promise<RawPosting[]> {
     console.warn(welcomeToTheJungleClientSideFilterWarning);
     const keywordTokens = tokenizeWttj(keywords);
     const locationTokens = tokenizeWttj(location);

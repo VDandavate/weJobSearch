@@ -248,6 +248,7 @@ export interface SearchFilters {
   minFit?: number;
   minSalary?: number;
   maxAgeDays?: number;
+  radiusMiles?: number;
 }
 
 function applySearchFilters(entries: EvaluatedPosting[], filters: SearchFilters): EvaluatedPosting[] {
@@ -359,7 +360,9 @@ export async function runSearchBatch(
       ),
     ];
   } else {
-    results = await context.registry.searchAll(keywords, resolvedLocation);
+    results = await context.registry.searchAll(keywords, resolvedLocation, {
+      radiusMiles: filters.radiusMiles,
+    });
     const failed = results.filter((source) => source.error !== null);
     const succeeded = results.filter((source) => source.error === null);
     if (failed.length === 0) {
@@ -499,6 +502,7 @@ export async function searchByProfile(
     );
   }
   const location = preferences.preferredLocations[0] ?? '';
+  const radiusMiles = preferences.searchRadiusMiles;
 
   const allResults: SourceSearchResult[] = [];
   const seenHashes = new Set<string>();
@@ -506,7 +510,7 @@ export async function searchByProfile(
   let newRecords = 0;
   let alreadyRecorded = 0;
   for (const query of queries) {
-    const outcome = await searchJobPostings(query, location, dependencies);
+    const outcome = await searchJobPostings(query, location, dependencies, { radiusMiles });
     allResults.push(...outcome.results);
     newRecords += outcome.newRecords;
     alreadyRecorded += outcome.alreadyRecorded;
