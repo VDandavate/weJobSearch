@@ -22,6 +22,7 @@ import {
   runShowCommand,
   runUpdateStatusCommand,
   runValidateCommand,
+  runWipeProfileCommand,
   type CliDispatchResult,
 } from './jobSearchCore';
 import {
@@ -44,6 +45,7 @@ import {
   parseShowArgs,
   parseUpdateStatusArgs,
   parseValidateArgs,
+  parseWipeProfileArgs,
   type ParsedCoverLetterArgs,
   type ParsedDigestArgs,
   type ParsedEvaluateArgs,
@@ -53,6 +55,7 @@ import {
   type ParsedReviewArgs,
   type ParsedSearchArgs,
   type ParsedShowArgs,
+  type ParsedWipeProfileArgs,
 } from './argsParser';
 
 // CLI command dispatcher (SDD Section 4.1). Extracted verbatim from
@@ -515,6 +518,32 @@ export function importDataHelpText(): string[] {
   ];
 }
 
+export function wipeProfileHelpText(): string[] {
+  return [
+    'wipeProfile - delete the whole canonical data root (typed confirmation + tar backup)',
+    '',
+    '  Deletes every file and directory under the resolved data root: the four',
+    '  profile files, resumeVariants.yaml, search state, applications/ (history +',
+    '  per-role output), documents/, and templates/. A tar backup is written next',
+    '  to the root first; a failed backup aborts the wipe before anything is',
+    '  deleted. Nothing outside the data root is ever touched.',
+    '',
+    'Usage:',
+    '  node dist/cli/jobSearchCore.js wipeProfile [--dataRoot PATH] [--noBackup] [--force]',
+    '',
+    'Options:',
+    '  --dataRoot PATH            Whole data-root relocation (default canonical data root).',
+    '  --noBackup                 Skip the automatic tar backup next to the root.',
+    '  --force                    Skip the interactive typed confirmation (scripted use).',
+    '  --help                     Show this help.',
+    '',
+    '  Without --force the command prints the inventory (files, directories,',
+    '  bytes) and requires typing exactly "wipe"; anything else aborts and',
+    '  deletes nothing. A missing root is a no-op, not an error. Restore the',
+    '  backup by extracting the tarball, or with importData into an empty root.',
+  ];
+}
+
 export function parsePdfHelpText(): string[] {
   return [
     'parsePdf - parse a local PDF resume or job description',
@@ -615,6 +644,9 @@ export async function dispatchCli(argv: readonly string[]): Promise<CliDispatchR
   }
   if (command === 'importData') {
     return runImportDataCommand(parseImportDataArgs(argv.slice(1)));
+  }
+  if (command === 'wipeProfile') {
+    return runWipeProfileCommand(parseWipeProfileArgs(argv.slice(1)));
   }
   const known = commandNames.find((name) => name === command);
   if (known === undefined) {

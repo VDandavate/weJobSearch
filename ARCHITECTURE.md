@@ -297,7 +297,7 @@ namingLinter`.
 
 ## Testing, verification, and current limitations
 
-The suite (Vitest, 1026 tests across 64 files in this baseline) exercises the
+The suite (Vitest, 1038 tests across 65 files in this baseline) exercises the
 pure logic against synthetic in-memory/temp-directory data and the committed
 `fixtures/` directory — never real profile/application data and never the
 network (the end-to-end pipeline stubs `globalThis.fetch` with deterministic

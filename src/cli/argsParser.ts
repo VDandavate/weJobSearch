@@ -136,6 +136,13 @@ export interface ParsedImportDataArgs {
   help?: boolean;
 }
 
+export interface ParsedWipeProfileArgs {
+  dataRoot?: string;
+  noBackup?: boolean;
+  force?: boolean;
+  help?: boolean;
+}
+
 export interface ParsedPdfArgs {
   filePath?: string;
   dataRoot?: string;
@@ -410,6 +417,25 @@ export function parseImportDataArgs(args: readonly string[]): ParsedImportDataAr
       switch (name) {
         case 'archivePath': parsed.archivePath = value; break;
         case 'rootPath': parsed.rootPath = value; break;
+        default: break;
+      }
+    },
+  });
+  return parsed;
+}
+
+export function parseWipeProfileArgs(args: readonly string[]): ParsedWipeProfileArgs {
+  const parsed: ParsedWipeProfileArgs = {};
+  scanCliTokens(args, {
+    onHelp: () => { parsed.help = true; },
+    onFlag: (name) => {
+      if (name === 'noBackup') { parsed.noBackup = true; return true; }
+      if (name === 'force') { parsed.force = true; return true; }
+      return false;
+    },
+    onOption: (name, value) => {
+      switch (name) {
+        case 'dataRoot': parsed.dataRoot = value; break;
         default: break;
       }
     },

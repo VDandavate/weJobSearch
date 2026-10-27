@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -28,6 +29,7 @@ import {
   runShowCommand,
   runUpdateStatusCommand,
   runValidateCommand,
+  runWipeProfileCommand,
 } from './jobSearchCore';
 import {
   buildProfileQueries,
@@ -42,6 +44,8 @@ import {
   parsePreviewResumeArgs,
   parseReportArgs,
   parseReviewQueueArgs,
+  parseWipeProfileArgs,
+  readUserProfile,
   runAddContactCommand,
   runConfirmAppCommand,
   runDraftOutreachCommand,
@@ -2638,3 +2642,111 @@ describe('runReportCommand redaction polarity and output formats (U45)', () => {
     });
   });
 });
+
+describe('wipeProfile', () => {
+  async function withWipeSandbox<T>(fn: (root: string) => Promise<T>): Promise<T> {
+    const isolated = await createIsolatedDataRootFromFixtures();
+    try {
+      return await fn(isolated.root);
+    } finally {
+      // The wipe writes backups next to the root; drop them so tmp stays clean.
+      const prefix = `${isolated.root.split('/').pop()}-backup-`;
+      for (const name of await readdir(dirname(isolated.root))) {
+        if (name.startsWith(prefix)) {
+          await rm(join(dirname(isolated.root), name), { force: true });
+        }
+      }
+      await isolated.restore();
+    }
+  }
+
+  it('parses --noBackup and --force as booleans plus --dataRoot', () => {
+    expect(parseWipeProfileArgs(['--dataRoot', '/tmp/x', '--noBackup', '--force'])).toEqual({
+      dataRoot: '/tmp/x',
+      noBackup: true,
+      force: true,
+    });
+  });
+
+  it('aborts and deletes nothing on any input other than wipe', async () => {
+    await withWipeSandbox(async (root) => {
+      const result = await runWipeProfileCommand({}, { prompt: scriptedPrompt(['nope']) });
+      expect(result.exitCode).toBe(0);
+      expect(result.printedLines.join('\n')).toContain('Aborted: nothing was deleted.');
+      expect(existsSync(join(root, 'masterProfile.md'))).toBe(true);
+    });
+  });
+
+  it('wipes after the typed confirmation and writes the backup', async () => {
+    await withWipeSandbox(async (root) => {
+      const result = await runWipeProfileCommand({}, { prompt: scriptedPrompt([' wipe \n']) });
+      expect(result.exitCode).toBe(0);
+
+      const text = result.printedLines.join('\n');
+      expect(text).toContain(`Wipe target: '${root}'`);
+      expect(text).toContain('Backup:');
+      expect(existsSync(root)).toBe(false);
+
+      const backupName = (await readdir(dirname(root))).find(
+        (name) => name.startsWith(`${root.split('/').pop()}-backup-`),
+      );
+      expect(backupName).toBeDefined();
+    });
+  });
+
+  it('--force skips the prompt but still backs up', async () => {
+    await withWipeSandbox(async (root) => {
+      const result = await runWipeProfileCommand({ force: true });
+      expect(result.exitCode).toBe(0);
+      expect(result.printedLines.join('\n')).toContain('Backup:');
+      expect(existsSync(root)).toBe(false);
+    });
+  });
+
+  it('--noBackup skips the archive', async () => {
+    await withWipeSandbox(async (root) => {
+      const result = await runWipeProfileCommand({ force: true, noBackup: true });
+      expect(result.exitCode).toBe(0);
+      expect(result.printedLines.join('\n')).toContain('No backup written (--noBackup).');
+      expect(existsSync(root)).toBe(false);
+      const rootName = root.split('/').pop() ?? '';
+      const backups = (await readdir(dirname(root))).filter((name) =>
+        name.startsWith(`${rootName}-backup-`),
+      );
+      expect(backups).toEqual([]);
+    });
+  });
+
+  it('is a clean no-op exit 0 for a missing root', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'weJobSearch-wipe-'));
+    try {
+      const result = await runWipeProfileCommand({ dataRoot: join(parent, 'absent'), force: true });
+      expect(result.exitCode).toBe(0);
+      expect(result.printedLines.join('\n')).toContain('Nothing to wipe');
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a data root inside the git work tree', async () => {
+    const result = await runWipeProfileCommand({ dataRoot: join(__dirname, 'insideRepo'), force: true });
+    expect(result.exitCode).toBe(1);
+    expect(result.printedLines.join('\n')).toContain('must live outside the git work tree');
+  });
+
+  it('leaves the profile unconfigured and validate pointing at init', async () => {
+    await withWipeSandbox(async (root) => {
+      const wiped = await runWipeProfileCommand({ force: true });
+      expect(wiped.exitCode).toBe(0);
+
+      const state = await readUserProfile({ dataRoot: root });
+      expect(state.configured).toBe(false);
+      expect(state.onboardingSteps?.length ?? 0).toBeGreaterThan(0);
+
+      const validation = await runValidateCommand({ dataRoot: root });
+      expect(validation.exitCode).toBe(1);
+      expect(validation.printedLines.join('\n')).toContain('Run init');
+    });
+  });
+});
+

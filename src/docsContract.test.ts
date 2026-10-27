@@ -11,6 +11,7 @@ const documentedToolFloor = 19;
 
 const toolWordToCount: Record<string, number> = {
   nineteen: 19,
+  twenty: 20,
 };
 
 // Public docs manifest: only the parent SDD ships to the public tree. The

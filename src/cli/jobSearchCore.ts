@@ -15,6 +15,12 @@ import {
   OutreachGenerationError,
 } from '../generators/outreachMessageGenerator';
 import { exportDataRoot, importDataRoot, type ImportResult } from '../utils/dataPortability';
+import { ProfileConfirmationRequiredError } from '../utils/profileService';
+import {
+  inventoryDataRoot,
+  wipeDataRoot,
+  type WipeDataRootResult,
+} from '../utils/profileWiper';
 import { parsePdfDocument } from '../utils/pdfParser';
 import {
   generateApplicationId,
@@ -95,6 +101,7 @@ import type {
   ParsedShowArgs,
   ParsedUpdateStatusArgs,
   ParsedValidateArgs,
+  ParsedWipeProfileArgs,
 } from './argsParser';
 
 // Compatibility re-exports (Phase 7a): argument parsing lives in
@@ -121,6 +128,7 @@ export {
   parseShowArgs,
   parseUpdateStatusArgs,
   parseValidateArgs,
+  parseWipeProfileArgs,
 } from './argsParser';
 export type {
   ParsedAddContactArgs,
@@ -142,6 +150,7 @@ export type {
   ParsedShowArgs,
   ParsedUpdateStatusArgs,
   ParsedValidateArgs,
+  ParsedWipeProfileArgs,
 } from './argsParser';
 export {
   buildProfileQueries,
@@ -186,6 +195,7 @@ import {
   showHelpText,
   updateStatusHelpText,
   validateHelpText,
+  wipeProfileHelpText,
 } from './cliDispatcher';
 export type {
   EvaluationDependencies,
@@ -250,6 +260,7 @@ export const commandNames: readonly string[] = [
   'importData',
   'init',
   'validate',
+  'wipeProfile',
 ];
 
 const oneLineSummaries: Record<string, string> = {
@@ -272,6 +283,7 @@ const oneLineSummaries: Record<string, string> = {
   importData: 'Restore a backup into a fresh canonical root (never overwrites)',
   init: 'Run the setup wizard',
   validate: 'Validate jobPreferences.yaml and resumeVariants.yaml configs',
+  wipeProfile: 'Delete the whole canonical data root (typed confirmation + tar backup)',
 };
 
 const usageText = ['Usage: node dist/cli/jobSearchCore.js <command> [options]', "Try 'node dist/cli/jobSearchCore.js --help'."];
@@ -1330,6 +1342,84 @@ export async function runImportDataCommand(args: ParsedImportDataArgs): Promise<
 // Step 7 jobSearchServer.ts server registers as native tools. They share the
 // same core paths as the CLI commands and never chain into generate,
 // draftCoverLetter, or draftOutreach (Section 1.5).
+
+// CLI wipeProfile: same resolve guard, inventory, and backup mechanics as the
+// MCP tool below; the typed 'wipe' prompt is the CLI's confirmation gate, so
+// --force is the only way past it (scripted use still backs up).
+export async function runWipeProfileCommand(
+  args: ParsedWipeProfileArgs,
+  options: { prompt?: PromptContext } = {},
+): Promise<CliDispatchResult> {
+  if (args.help === true) {
+    return { exitCode: 0, printedLines: wipeProfileHelpText() };
+  }
+  let rootPath: string;
+  try {
+    rootPath = resolveDataRoot(args.dataRoot);
+  } catch (error) {
+    return exitOneWithMessage(error);
+  }
+  const inventory = await inventoryDataRoot(rootPath);
+  if (inventory === null) {
+    return { exitCode: 0, printedLines: [`Nothing to wipe: '${rootPath}' does not exist.`] };
+  }
+  const inventoryLines = [
+    `Wipe target: '${rootPath}'`,
+    `Contents: ${inventory.fileCount} file(s), ${inventory.dirCount} director(ies), ${inventory.totalBytes} bytes`,
+  ];
+  if (args.force !== true) {
+    // Created lazily, right before the ask: a readline interface opened before
+    // the inventory walk closes on stdin EOF when input is piped, which would
+    // reject the question instead of reading the confirmation line.
+    const prompt = options.prompt ?? createCliPromptContext();
+    prompt.print(inventoryLines);
+    let answer: string;
+    try {
+      answer = (
+        await prompt.ask(`Type 'wipe' to delete ${rootPath} and everything under it: `)
+      )
+        .trim()
+        .toLowerCase();
+    } finally {
+      if (options.prompt === undefined) {
+        prompt.close();
+      }
+    }
+    if (answer !== 'wipe') {
+      return { exitCode: 0, printedLines: [...inventoryLines, 'Aborted: nothing was deleted.'] };
+    }
+  }
+  try {
+    const result = await wipeDataRoot({ rootPath, noBackup: args.noBackup });
+    return {
+      exitCode: 0,
+      printedLines: [
+        ...inventoryLines,
+        `Deleted '${result.rootPath}' (${result.inventory.fileCount} file(s), ${result.inventory.dirCount} director(ies)).`,
+        result.backupPath === null
+          ? 'No backup written (--noBackup).'
+          : `Backup: '${result.backupPath}'`,
+      ],
+    };
+  } catch (error) {
+    return exitOneWithMessage(error);
+  }
+}
+
+// MCP wipeUserProfile: no interactive prompt (the host asks first), but the
+// same confirmation gate as initializeUserProfile, and the backup still runs
+// unless noBackup is true.
+export async function wipeUserProfile(
+  options: { confirmed?: boolean; noBackup?: boolean; dataRoot?: string } = {},
+): Promise<WipeDataRootResult> {
+  if (options.confirmed !== true) {
+    throw new ProfileConfirmationRequiredError();
+  }
+  return wipeDataRoot({
+    rootPath: resolveDataRoot(options.dataRoot),
+    noBackup: options.noBackup,
+  });
+}
 
 export interface LogNetworkingContactOptions {
   contactsPath?: string;

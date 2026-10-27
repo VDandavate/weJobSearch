@@ -136,8 +136,8 @@ From your agent, you can ask for each of these independently:
 ### 3. Verify the weJobSearch tools are available
 
 Ask your agent to list the weJobSearch tools it can call. You should see the
-nineteen MCP tools: `getUserProfile`, `initializeUserProfile`,
-`updateUserProfile`, `parsePdfDocument`, `ingestDocuments`,
+twenty MCP tools: `getUserProfile`, `initializeUserProfile`,
+`updateUserProfile`, `wipeUserProfile`, `parsePdfDocument`, `ingestDocuments`,
 `searchJobPostings`, `searchByProfile`, `evaluateJobPosting`,
 `generateTailoredApplication`, `draftCoverLetter`,
 `confirmApplicationSubmission`, `getReviewQueue`, `getFunnelReport`,
@@ -495,6 +495,7 @@ nothing else. Commands are independent: none chains into another capability.
 | `addContact --name NAME --company NAME [--relationship TYPE]` | Log or update a networking contact in the canonical `networkingContacts.json`. |
 | `exportData --archivePath PATH` | Back up the canonical data root to a gzip tarball. |
 | `importData --archivePath PATH` | Restore a backup into a fresh canonical root; refuses to overwrite existing profile files. |
+| `wipeProfile [--noBackup] [--force]` | Delete the whole canonical data root: prints the inventory, requires typing `wipe`, and writes a tar backup next to the root first (a failed backup aborts). |
 | `validate [--dataRoot PATH]` | Validate `jobPreferences.yaml` and `resumeVariants.yaml` against their schemas (fail-fast, writes nothing). |
 | `parsePdf --filePath PATH` | Parse a local PDF resume or job description (read-only text extraction). |
 | `confirmApp --company NAME --role TITLE [--notes TEXT]` | Confirm a submission and update history (manual portal submission first; the only path into `appliedConfirmed`). |
@@ -516,7 +517,7 @@ Use each command's `--help` flag for the exact option set.
 ```bash
 npm run lint          # tsc --noEmit (type-check only)
 npm run build         # tsc (emit to dist/)
-npm test              # vitest run (1026 tests across 64 files in this baseline)
+npm test              # vitest run (1038 tests across 65 files in this baseline)
 npm run namingLinter  # strict camelCase/PascalCase/zero-underscore scan, no build needed
 npm run setupHooks    # per-clone: git config core.hooksPath .githooks
 ```
@@ -669,7 +670,7 @@ node dist/mcp/jobSearchServer.js
 server.) For hosts with their own MCP configuration, register the same command
 plus the path to your local repo. Run `npm run build` if `dist/` is missing.
 
-The server registers **nineteen** tools:
+The server registers **twenty** tools:
 
 1. `getUserProfile` — read-only inspection of the saved profile; reports per-file
    configured state, what still needs attention, first-run onboarding steps when
@@ -712,6 +713,10 @@ The server registers **nineteen** tools:
     effectiveness, and preference drift. Suggestions only; nothing is written.
 19. `runSavedSearches` — run every saved search, dedup, evaluate, persist, and
     render both fixed tables.
+20. `wipeUserProfile` — **destructive**: delete the entire canonical data root
+    after an explicit `confirmed: true`, writing a gzip tar backup next to the
+    root first (a failed backup aborts the wipe). Refuses without confirmation;
+    `noBackup: true` skips the archive only when you explicitly accept that.
 
 The profile tools delegate to `src/utils/profileService.ts`, which makes
 first-time setup completable entirely inside an agentic host (the interactive
