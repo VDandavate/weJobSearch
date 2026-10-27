@@ -24,6 +24,7 @@ import {
   searchJobPostings,
   suggestRolesForProfile,
   updateUserProfile,
+  wipeUserProfile,
   type ProfileWriteResult,
 } from '../cli/jobSearchCore';
 import type { JobSpyAdapterRegistry } from '../scrapers/jobSpyAdapter';
@@ -283,6 +284,44 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
           filesUpdated: result.filesUpdated,
           sections: result.sections,
           summary: result.summary,
+        },
+      };
+    },
+  );
+
+  server.registerTool(
+    'wipeUserProfile',
+    {
+      description:
+        'Delete the ENTIRE canonical data root (profile files, resumeVariants.yaml, search state, applications/, documents/, templates/). Destructive and irreversible from this tool. Requires explicit user confirmation (confirmed: true) before anything is read, backed up, or deleted - the tool writes and deletes NOTHING without it, and the orchestrating agent must obtain the user\'s explicit agreement first. By default it first writes a gzip tar backup next to the root; if that backup fails the wipe aborts and nothing is deleted. Pass noBackup: true only when the user explicitly accepts wiping without a backup. A missing root is a clean no-op. Local only; nothing is sent anywhere.',
+      inputSchema: {
+        confirmed: z
+          .boolean()
+          .default(false)
+          .describe('Must be true, set by the user, to authorize the wipe. Defaults to false so nothing is deleted by accident.'),
+        noBackup: z
+          .boolean()
+          .optional()
+          .describe('Skip the automatic tar backup next to the data root. Only set when the user explicitly accepts no backup.'),
+      },
+    },
+    async (args) => {
+      const result = await wipeUserProfile({
+        confirmed: args.confirmed,
+        noBackup: args.noBackup,
+        dataRoot: dependencies.dataRoot,
+      });
+      const summary = result.wiped
+        ? `Wiped '${result.rootPath}': ${result.inventory.fileCount} file(s), ${result.inventory.dirCount} director(ies).`
+        : `Nothing to wipe: '${result.rootPath}' does not exist.`;
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: {
+          rootPath: result.rootPath,
+          wiped: result.wiped,
+          fileCount: result.inventory.fileCount,
+          dirCount: result.inventory.dirCount,
+          backupPath: result.backupPath,
         },
       };
     },

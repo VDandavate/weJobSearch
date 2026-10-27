@@ -114,6 +114,7 @@ const expectedToolNames = [
   'suggestRoles',
   'initializeUserProfile',
   'updateUserProfile',
+  'wipeUserProfile',
   'parsePdfDocument',
   'ingestDocuments',
   'evaluateJobPosting',
@@ -1242,6 +1243,73 @@ describe('jobSearchServer profile tools', () => {
         });
         expect(second.isError).toBe(true);
         expect(second.text).toContain('already exists');
+      } finally {
+        await connected.close();
+      }
+    });
+  });
+
+  it('wipeUserProfile refuses without explicit confirmation and deletes nothing', async () => {
+    await withEmptySandbox(async (paths) => {
+      const connected = await connectToEmptyServer(paths);
+      try {
+        await callTool(connected, 'initializeUserProfile', {
+          ...initializationPayload,
+          confirmed: true,
+        });
+        const refused = await callTool(connected, 'wipeUserProfile', {});
+        expect(refused.isError).toBe(true);
+        expect(refused.text).toContain('confirmation required');
+
+        const state = await callTool(connected, 'getUserProfile', {});
+        expect(JSON.parse(state.text).configured).toBe(true);
+        expect(existsSync(paths.profilePath)).toBe(true);
+      } finally {
+        await connected.close();
+      }
+    });
+  });
+
+  it('wipeUserProfile wipes the root, backs it up, and reports the summary', async () => {
+    await withEmptySandbox(async (paths) => {
+      const connected = await connectToEmptyServer(paths);
+      try {
+        await callTool(connected, 'initializeUserProfile', {
+          ...initializationPayload,
+          confirmed: true,
+        });
+        const wiped = await callTool(connected, 'wipeUserProfile', { confirmed: true });
+        expect(wiped.isError).toBe(false);
+        const backupPath = wiped.structuredContent?.backupPath as string;
+        expect(wiped.structuredContent?.wiped).toBe(true);
+        expect(wiped.structuredContent?.fileCount as number).toBeGreaterThan(0);
+        expect(existsSync(backupPath)).toBe(true);
+        await rm(backupPath, { force: true });
+        expect(existsSync(paths.dir)).toBe(false);
+
+        const state = await callTool(connected, 'getUserProfile', {});
+        expect(JSON.parse(state.text).configured).toBe(false);
+      } finally {
+        await connected.close();
+      }
+    });
+  });
+
+  it('wipeUserProfile skips the backup when noBackup is true', async () => {
+    await withEmptySandbox(async (paths) => {
+      const connected = await connectToEmptyServer(paths);
+      try {
+        await callTool(connected, 'initializeUserProfile', {
+          ...initializationPayload,
+          confirmed: true,
+        });
+        const wiped = await callTool(connected, 'wipeUserProfile', {
+          confirmed: true,
+          noBackup: true,
+        });
+        expect(wiped.isError).toBe(false);
+        expect(wiped.structuredContent?.backupPath).toBeNull();
+        expect(existsSync(paths.dir)).toBe(false);
       } finally {
         await connected.close();
       }
