@@ -224,7 +224,7 @@ Drafting a resume never triggers a letter or outreach, and vice versa.
 ## MCP boundary
 
 `src/mcp/jobSearchServer.ts` creates an MCP server over stdio. It registers
-nineteen tools:
+23 tools:
 
 1. `parsePdfDocument`
 2. `ingestDocuments`
@@ -232,30 +232,38 @@ nineteen tools:
 4. `suggestRoles`
 5. `initializeUserProfile`
 6. `updateUserProfile`
-7. `evaluateJobPosting`
-8. `searchJobPostings`
-9. `searchByProfile`
-10. `runSavedSearches`
-11. `getPostingDetail`
-12. `generateTailoredApplication`
-13. `confirmApplicationSubmission`
-14. `getReviewQueue`
-15. `getFunnelReport`
-16. `analyzeApplicationPatterns`
-17. `logNetworkingContact`
-18. `draftOutreachMessage`
-19. `draftCoverLetter`
+7. `wipeUserProfile`
+8. `getSetupQuestion`
+9. `answerSetupQuestion`
+10. `commitSetup`
+11. `evaluateJobPosting`
+12. `searchJobPostings`
+13. `searchByProfile`
+14. `runSavedSearches`
+15. `getPostingDetail`
+16. `generateTailoredApplication`
+17. `confirmApplicationSubmission`
+18. `getReviewQueue`
+19. `getFunnelReport`
+20. `analyzeApplicationPatterns`
+21. `logNetworkingContact`
+22. `draftOutreachMessage`
+23. `draftCoverLetter`
 
-Every handler delegates to the same `src/cli/jobSearchCore.ts` functions the
-CLI uses — the fixed table contract, dedup-before-evaluate, idempotency, and
-the "ask, don't assume" firewall are inherited, not re-implemented. The profile
-tools (`getUserProfile`, `initializeUserProfile`, `updateUserProfile`) delegate
-to `src/utils/profileService.ts`, which keeps profile setup fully agent-hostable
-with explicit confirmation gating; the CLI `init` wizard remains an optional
-developer fallback. Cover-letter drafting is available both as the
-`draftCoverLetter` CLI command (and the generated Claude Code command) and as
-the `draftCoverLetter` MCP tool (see the README). Agents surface the tool menu
-and the user picks; no tool chains into another.
+Every handler delegates to the same engine the CLI uses — the fixed table
+contract, dedup-before-evaluate, idempotency, and the "ask, don't assume"
+firewall are inherited, not re-implemented. Most handlers call the functions in
+`src/cli/jobSearchCore.ts`. The three setup-cursor tools
+(`getSetupQuestion`, `answerSetupQuestion`, `commitSetup`) call
+`src/core/setupCursor.ts` instead: it computes the question plan, carries the
+`setupState.json` checkpoint, and delegates the single confirmed write to
+`src/utils/profileService.ts`. The profile tools (`getUserProfile`,
+`initializeUserProfile`, `updateUserProfile`) call that same service, which
+keeps profile setup fully agent-hostable with explicit confirmation gating; the
+CLI `init` wizard remains an optional developer fallback. Cover-letter drafting
+is available both as the `draftCoverLetter` CLI command (and the generated
+Claude Code command) and as the `draftCoverLetter` MCP tool (see the README).
+Agents surface the tool menu and the user picks; no tool chains into another.
 
 ## Privacy and safety boundaries
 
