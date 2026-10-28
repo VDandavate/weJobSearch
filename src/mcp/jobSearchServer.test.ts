@@ -112,6 +112,9 @@ const contactsJson = {
 const expectedToolNames = [
   'getUserProfile',
   'suggestRoles',
+  'getSetupQuestion',
+  'answerSetupQuestion',
+  'commitSetup',
   'initializeUserProfile',
   'updateUserProfile',
   'wipeUserProfile',
@@ -411,6 +414,56 @@ describe('jobSearchServer (MCP)', () => {
         await connected.close();
       }
     });
+  });
+
+  it('drives the setup question cursor through the MCP tools and keeps state under the temp root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'weJobSearch-mcp-setup-'));
+    const previousRoot = process.env.WEJOBSEARCHDATAROOT;
+    process.env.WEJOBSEARCHDATAROOT = dir;
+    const paths: SandboxPaths = {
+      dir,
+      historyPath: join(dir, 'applications', 'applicationHistory.json'),
+      preferencesPath: join(dir, 'jobPreferences.yaml'),
+      profilePath: join(dir, 'masterProfile.md'),
+      contactsPath: join(dir, 'networkingContacts.json'),
+      savedSearchesPath: join(dir, 'savedSearches.json'),
+      searchHistoryPath: join(dir, 'searchHistory.json'),
+    };
+    const connected = await connectToServer(paths, makeRegistry([]), { dataRoot: dir });
+    try {
+      const first = await callTool(connected, 'getSetupQuestion', {});
+      expect(first.isError).toBe(false);
+      expect(first.structuredContent?.questionId).toBe('contactName');
+      expect(existsSync(join(dir, 'setupState.json'))).toBe(false);
+
+      const outOfOrder = await callTool(connected, 'answerSetupQuestion', {
+        questionId: 'experience',
+        answer: [],
+      });
+      expect(outOfOrder.isError).toBe(true);
+      expect(outOfOrder.text).toContain('Out-of-order');
+
+      const next = await callTool(connected, 'answerSetupQuestion', {
+        questionId: 'contactName',
+        answer: 'Jane Sample',
+      });
+      expect(next.isError).toBe(false);
+      expect(next.structuredContent?.questionId).toBe('contactEmail');
+      expect(existsSync(join(dir, 'setupState.json'))).toBe(true);
+
+      const unconfirmed = await callTool(connected, 'commitSetup', { confirmed: false });
+      expect(unconfirmed.isError).toBe(true);
+      expect(unconfirmed.text).toContain('requires confirmed: true');
+      expect(existsSync(join(dir, 'masterProfile.md'))).toBe(false);
+    } finally {
+      await connected.close();
+      if (previousRoot === undefined) {
+        delete process.env.WEJOBSEARCHDATAROOT;
+      } else {
+        process.env.WEJOBSEARCHDATAROOT = previousRoot;
+      }
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('describes the fixed result tables with the correct 7/6 column counts', async () => {

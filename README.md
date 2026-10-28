@@ -136,7 +136,8 @@ From your agent, you can ask for each of these independently:
 ### 3. Verify the weJobSearch tools are available
 
 Ask your agent to list the weJobSearch tools it can call. You should see the
-twenty MCP tools: `getUserProfile`, `initializeUserProfile`,
+23 MCP tools: `getUserProfile`, `getSetupQuestion`, `answerSetupQuestion`,
+`commitSetup`, `initializeUserProfile`,
 `updateUserProfile`, `wipeUserProfile`, `parsePdfDocument`, `ingestDocuments`,
 `searchJobPostings`, `searchByProfile`, `evaluateJobPosting`,
 `generateTailoredApplication`, `draftCoverLetter`,
@@ -407,10 +408,12 @@ setup using the generated `setup` command. The flow is:
    root and which profile files exist.
 2. **Documents** — you point the agent at folders with resumes; it calls
    `ingestDocuments` to parse them and propose a profile.
-3. **Profile draft** — the agent proposes `masterProfile.md` sections (contact,
-   work authorization, summary, skills, experience, education, certifications);
-   you review and correct each section. LinkedIn and portfolio may be left
-   empty.
+3. **Profile draft** — the agent asks the contact and resume questions one at a
+   time from the server-side plan (`getSetupQuestion`), showing each question's
+   reason, recommendation, and a plain-text section table (`contact`,
+   `work authorization`, `summary`, `skills`, `experience`, `education`,
+   `certifications`). You correct a section and the same question is re-asked;
+   LinkedIn and portfolio may be left empty (shown as `not provided`).
 4. **Target roles** — you provide the role titles to search for.
 5. **Locations** — you provide preferred locations as free text (Remote, Hybrid
    East Coast US, a city, or a ZIP code). If you name a metro, the agent offers
@@ -424,10 +427,11 @@ setup using the generated `setup` command. The flow is:
    `noRelocation` is declined.
 8. **Screening answers** — derived from earlier answers; only notice period,
    per-skill years, and sponsorship type (when required) are asked.
-9. **Preview and confirm** — the agent shows every file that will be written
-   with diffs for existing files. **Nothing is written before you confirm.**
-   On confirmation, `initializeUserProfile` (first run) or `updateUserProfile`
-   (re-run) is called with `confirmed: true`.
+9. **Preview and confirm** — when the plan returns `readyToConfirm`, the agent
+   shows the four file paths only (no contents, no diff). **Nothing is written
+   before you confirm.** On confirmation, `commitSetup({ confirmed: true })`
+   builds the payload server-side, calls `initializeUserProfile`, and clears the
+   checkpoint. Re-runs use `updateUserProfile` with only the changed sections.
 10. **Health check** — `npm run setup` runs; Node and config errors stop the
     flow, missing Typst is a warning only.
 11. **First search** — the agent **offers** a search and waits for your
@@ -517,7 +521,7 @@ Use each command's `--help` flag for the exact option set.
 ```bash
 npm run lint          # tsc --noEmit (type-check only)
 npm run build         # tsc (emit to dist/)
-npm test              # vitest run (1041 tests across 65 files in this baseline)
+npm test              # vitest run (1085 tests across 68 files in this baseline)
 npm run namingLinter  # strict camelCase/PascalCase/zero-underscore scan, no build needed
 npm run setupHooks    # per-clone: git config core.hooksPath .githooks
 ```
@@ -554,7 +558,7 @@ committed.
   login, CAPTCHA, and rate-limit limitations* below.
 - **Typst/font-asset availability**: see *Resume / WASM / Typst / font
   behavior* below.
-- **Stale setup checkpoint**: an in-progress `setupState.json` older than 7 days is treated as abandoned and ignored; resume setup to recreate it.
+- **Stale setup checkpoint**: an in-progress `setupState.json` older than 7 days is reported as a resume point (with its last answered date) rather than discarded; continue where you stopped or ask the agent to restart.
 - **Node version mismatch**: install 26.5.0 from `.nvmrc` (`nvm use`); `engines >= 24` is the supported floor, not the install target.
 
 ## Data and document locations
@@ -574,7 +578,7 @@ none of it can ever be committed.
 | `documents/` | **Private source documents**: legacy resumes, saved job postings. Keep source documents (PDF, Word, Markdown, text) here or in any private local directory, then give the local path to your agent. | Outside the repo |
 | `applications/applicationHistory.json` | Permanent evaluation/application history. | Outside the repo |
 | `searchHistory.json` | Recent search queries with timestamps and result counts (reviewable/repeatable). | Outside the repo |
-| `setupState.json` | In-progress profile-setup checkpoint for session resumption (created lazily, cleared on completion). | Outside the repo |
+| `setupState.json` | In-progress profile-setup checkpoint: the ordered question cursor, the answers given so far, and the plan version (created lazily, cleared on confirmed commit). | Outside the repo |
 | `applications/<company><role>/` | Per-role output: `tailoredResume.{typ,pdf}`, `coverLetter.md`, `outreachMessage.md`. | Outside the repo |
 | `profile/` (in the repo) | Only blank `.example` templates plus the `resumeVariants.yaml` structure seed. | Committed |
 | `fixtures/` | Synthetic sample data used by the tests and dry-run pipeline. | Committed |
@@ -670,7 +674,7 @@ node dist/mcp/jobSearchServer.js
 server.) For hosts with their own MCP configuration, register the same command
 plus the path to your local repo. Run `npm run build` if `dist/` is missing.
 
-The server registers **twenty** tools:
+The server registers **23** tools:
 
 1. `getUserProfile` — read-only inspection of the saved profile; reports per-file
    configured state, what still needs attention, first-run onboarding steps when
@@ -717,6 +721,17 @@ The server registers **twenty** tools:
     after an explicit `confirmed: true`, writing a gzip tar backup next to the
     root first (a failed backup aborts the wipe). Refuses without confirmation;
     `noBackup: true` skips the archive only when you explicitly accept that.
+21. `getSetupQuestion` — return the current first-run setup question, one at a
+    time, from the server-side question plan. Resumes at the stored cursor and
+    reports the last answered date instead of discarding answers; `restart:
+    true` starts over only when you ask. Read-only: never writes a profile file.
+22. `answerSetupQuestion` — answer the current question by its exact id and get
+    the next one. Rejects an out-of-order id and validates that field before
+    writing; `null` skips an optional question only. Writes the
+    `setupState.json` checkpoint, never a profile file.
+23. `commitSetup` — write the profile from the stored answers after your
+    explicit `confirmed: true`. Builds the payload server-side, names blocking
+    field ids when required answers are missing, and clears the checkpoint.
 
 The profile tools delegate to `src/utils/profileService.ts`, which makes
 first-time setup completable entirely inside an agentic host (the interactive

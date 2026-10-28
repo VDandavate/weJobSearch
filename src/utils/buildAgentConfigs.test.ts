@@ -161,14 +161,14 @@ describe('setup command contract', () => {
   });
 
   it('Documents requires a plain-language staging explanation before copying', () => {
-    const documents = setupStep('2. Documents.', '3. Profile draft.');
+    const documents = setupStep('2. Documents.', '3. Profile sections.');
     expect(documents).toContain('Before staging anything');
     expect(documents).toContain('reads only inside its data root');
     expect(documents).toContain('originals are left untouched');
   });
 
   it('Stop requires the full closing-message contract', () => {
-    const stop = setupStep('12. Stop.');
+    const stop = setupStep('8. Stop.');
     expect(stop).toContain('searchByProfile');
     expect(stop).toContain('primary next step');
     expect(stop).toContain('searchJobPostings');
@@ -179,13 +179,14 @@ describe('setup command contract', () => {
     expect(stop).toContain('nothing chains automatically');
   });
 
-  it('names the MCP tools in flow order', () => {
+  it('names the setup cursor and MCP tools in flow order', () => {
     const body = buildClaudeCommandsText().setup.split('## Command: setup')[1] ?? '';
     const flowOrder = [
+      'getSetupQuestion',
+      'answerSetupQuestion',
       'getUserProfile',
       'ingestDocuments',
-      'initializeUserProfile',
-      'updateUserProfile',
+      'commitSetup',
       'searchByProfile',
       'searchJobPostings',
     ];
@@ -196,11 +197,51 @@ describe('setup command contract', () => {
     expect([...positions].sort((left, right) => left - right)).toEqual(positions);
   });
 
+  it('states the one-question-per-turn rule and the eight phases', () => {
+    const body = setupBody();
+    expect(body).toContain('one question per turn');
+    expect(body).toContain('Never combine two questions');
+    for (const heading of [
+      '1. Inspect.',
+      '2. Documents.',
+      '3. Profile sections.',
+      '4. Preferences.',
+      '5. Preview and confirm.',
+      '6. Health check.',
+      '7. First search.',
+      '8. Stop.',
+    ]) {
+      expect(body, `${heading} missing from the setup command`).toContain(heading);
+    }
+    expect(body).not.toContain('9. Preview');
+  });
+
+  it('moves the radius limitation and five sources to confirmation', () => {
+    const confirm = setupStep('5. Preview and confirm.', '6. Health check.');
+    expect(confirm).toContain('radius is applied only to LinkedIn');
+    expect(confirm).toContain('hiring.cafe');
+    expect(confirm).toContain('Wellfound');
+    expect(confirm).toContain('Built In');
+    expect(confirm).toContain('FlexJobs');
+  });
+
   it('states the no-write-before-confirmation rule', () => {
-    const body = (buildClaudeCommandsText().setup.split('## Command: setup')[1] ?? '').replace(/\s+/g, ' ');
-    expect(body).toContain(
-      'Do not write, create, or modify any profile file before the user confirms the preview.',
-    );
+    const body = setupBody();
+    expect(body).toContain('never write a profile file before step 5');
+    expect(body).toContain('Only after the user confirms, call `commitSetup({ confirmed: true })`');
+  });
+
+  it('names the three setup tools in every generated config file', async () => {
+    await withTempDir(async (dir) => {
+      const written = await writeAgentConfigs(dir);
+      expect(written.length).toBeGreaterThan(0);
+      for (const filePath of written) {
+        const body = await readFile(filePath, 'utf8');
+        for (const toolName of ['getSetupQuestion', 'answerSetupQuestion', 'commitSetup']) {
+          expect(body, `${filePath} is missing ${toolName}`).toContain(toolName);
+        }
+      }
+    });
   });
 
   it('states the offer-dont-run rule for the first search', () => {
