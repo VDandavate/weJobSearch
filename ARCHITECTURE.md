@@ -213,15 +213,13 @@ Drafting a resume never triggers a letter or outreach, and vice versa.
   not in the SDD §2.2 in-repo `profile/` + `applications/` tree. `profile/` in
   the repo ships only blank `.example` templates plus the `resumeVariants.yaml`
   structure seed. This deviation is deliberate (real data can never be
-  committed); the SDD file tree itself is unchanged. See `HANDOFF.md` Judgment
-  calls.
+  committed); the SDD file tree itself is unchanged.
 - **Spec deviation — active run state (SDD §2.2/Requirement 4 errata, DECIDED
   Phase 6).** The full `stateManager.ts` / `pipelineState.json`
-  active-run-state engine is wont-implement: interrupted search, evaluate, or
+  active-run-state engine is not implemented: interrupted search, evaluate, or
   generate runs do not resume; the persistence contract is the
   application-history log plus per-role output directories only. No new module,
-  no `pipelineState.json`; the SDD file itself is unchanged. See `HANDOFF.md`
-  Known limitations.
+  no `pipelineState.json`; the SDD file itself is unchanged.
 
 ## MCP boundary
 

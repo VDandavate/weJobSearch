@@ -8,7 +8,7 @@ The full specification is `docs/weJobSearch-SDD.md`. This file is a summary and 
 
 **Setup routing (first run or after a wipe):** Any user request to set up, initialize, or rebuild the profile ("set up my profile" or any phrasing of first-run setup) means: run the `setup` command and follow `.claude/commands/setup.md` exactly, step by step. Do not improvise the flow, and do not infer that setup chains into any other capability (SDD Section 1.5). A request that already names a listed capability keeps its own command; this trigger is for setup intent only.
 
-**The baseline build is complete.** `HANDOFF.md` documents what was built, verification results, judgment calls, and deviations. Do not rebuild the project from scratch; extend or fix it. If you are tempted to re-run "the build sequence", you are in the wrong session — read HANDOFF.md instead.
+**The baseline build is complete.** Do not rebuild the project from scratch; extend or fix it. If you are tempted to re-run "the build sequence", you are in the wrong session, and the right move is to read the code and `ARCHITECTURE.md`. There is no `HANDOFF.md`: its absence is correct and deliberate (see the known-limitations list below).
 
 ## Non-negotiable rules
 
@@ -68,9 +68,10 @@ npm run setupHooks     # one-time per clone: git config core.hooksPath .githooks
 
 ### Known limitations (don't "fix" these)
 
-- The CLI menu lists `parsePdf` and `confirmApp`, and both CLI subcommands **are wired** — the `dispatchCli` dispatcher routes them to `runParsePdfCommand` and `runConfirmAppCommand` in `jobSearchCore.ts`, matching the MCP tools `parsePdfDocument` and `confirmApplicationSubmission`. See HANDOFF.md.
+- The CLI menu lists `parsePdf` and `confirmApp`, and both CLI subcommands **are wired** — the `dispatchCli` dispatcher routes them to `runParsePdfCommand` and `runConfirmAppCommand` in `jobSearchCore.ts`, matching the MCP tools `parsePdfDocument` and `confirmApplicationSubmission`. Enforced by the CLI menu parity test in `src/docsContract.test.ts`.
 - Scraper E2E tests use `globalThis.fetch` stubs (`src/step13Pipeline.test.ts`); they never contact real job boards.
 - `src/utils/stateManager.ts` / `pipelineState.json` from the SDD are not implemented; persistence is `applicationHistory.json` plus per-role output directories.
+- **No `HANDOFF.md`.** Its absence is correct, not a missing file. SDD Section 9's baseline-completion report was a one-time artifact of the private build; this repo ships the public tree, where `src/docsContract.test.ts` treats the file's absence as the public posture and fails the suite the moment it appears. So: do not create it, do not restore it, and never put "update `HANDOFF.md`" in a ticket's acceptance criteria. Per-change judgment calls go in the commit message; spec-level ones go under the gitignored `privateDocs/`.
 
 ## Definition of done for any change
 
