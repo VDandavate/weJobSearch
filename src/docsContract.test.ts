@@ -140,6 +140,9 @@ function collectReadmeToolNames(readme: string): string[] {
 }
 
 function toolWordValue(word: string): number {
+  if (/^\d+$/.test(word)) {
+    return Number(word);
+  }
   const value = toolWordToCount[word.toLowerCase()];
   if (value === undefined) {
     throw new Error(`Unknown tool count word in docs: ${word}`);
