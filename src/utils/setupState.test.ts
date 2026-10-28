@@ -3,12 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  clearSetupState,
   isSetupStateComplete,
   isSetupStateStale,
   readSetupState,
   setupStateStalenessWindowMs,
+  writeSetupState,
   type SetupState,
 } from './setupState';
+import { resolveProfilePaths } from './profileService';
 
 // Session-resumption checkpoint for profile setup (EUO-15, goals G1/G4). The
 // tests pin the persistence contract (atomic write, schema validation,
@@ -87,5 +90,101 @@ describe('stale and complete rules', () => {
     expect(isSetupStateComplete(setupState({ step: 'confirmed' }))).toBe(true);
     expect(isSetupStateComplete(setupState({ step: 'documentsIngested' }))).toBe(false);
     expect(isSetupStateComplete(setupState({ step: 'profileProposed' }))).toBe(false);
+  });
+});
+
+describe('setupState cursor checkpoint (write side)', () => {
+  it('parses an original three-key file without the cursor fields', async () => {
+    await withTempFile(async (filePath) => {
+      await writeFile(
+        filePath,
+        JSON.stringify({ step: 'documentsIngested', updatedAt: '2026-08-18T10:00:00.000Z' }),
+        'utf8',
+      );
+      await expect(readSetupState(filePath)).resolves.toEqual({
+        step: 'documentsIngested',
+        updatedAt: '2026-08-18T10:00:00.000Z',
+      });
+    });
+  });
+
+  it('round-trips answers, cursor and planVersion', async () => {
+    await withTempFile(async (filePath) => {
+      const written = await writeSetupState(
+        {
+          step: 'profileProposed',
+          cursor: { questionId: 'summary' },
+          answers: { contactName: 'Jane Sample', usCitizen: true },
+          planVersion: 1,
+        },
+        filePath,
+        new Date('2026-10-27T12:00:00.000Z'),
+      );
+      expect(written.updatedAt).toBe('2026-10-27T12:00:00.000Z');
+      await expect(readSetupState(filePath)).resolves.toEqual(written);
+    });
+  });
+
+  it('refreshes updatedAt on every write when the caller does not supply one', async () => {
+    await withTempFile(async (filePath) => {
+      const first = await writeSetupState({ step: 'profileProposed' }, filePath, new Date('2026-10-27T12:00:00.000Z'));
+      const second = await writeSetupState(
+        { step: 'profileProposed', answers: { contactName: 'Jane Sample' } },
+        filePath,
+        new Date('2026-10-27T12:05:00.000Z'),
+      );
+      expect(second.updatedAt).not.toBe(first.updatedAt);
+      expect(second.updatedAt).toBe('2026-10-27T12:05:00.000Z');
+      expect((await readSetupState(filePath))?.answers).toEqual({ contactName: 'Jane Sample' });
+    });
+  });
+
+  it('refuses to overwrite a malformed existing checkpoint', async () => {
+    await withTempFile(async (filePath) => {
+      await writeFile(filePath, '{not json', 'utf8');
+      await expect(writeSetupState({ step: 'profileProposed' }, filePath)).rejects.toThrow(
+        /not valid JSON/,
+      );
+    });
+  });
+
+  it('keeps a stale checkpoint readable and reports it instead of discarding answers', async () => {
+    await withTempFile(async (filePath) => {
+      await writeSetupState(
+        {
+          step: 'profileProposed',
+          updatedAt: '2026-08-01T10:00:00.000Z',
+          cursor: { questionId: 'summary' },
+          answers: { contactName: 'Jane Sample' },
+        },
+        filePath,
+      );
+      const read = await readSetupState(filePath);
+      expect(read).not.toBeNull();
+      expect(isSetupStateStale(read as SetupState, new Date('2026-10-27T12:00:00.000Z'))).toBe(true);
+      expect(read?.answers).toEqual({ contactName: 'Jane Sample' });
+      expect(read?.cursor).toEqual({ questionId: 'summary' });
+    });
+  });
+
+  it('clears the checkpoint', async () => {
+    await withTempFile(async (filePath) => {
+      await writeSetupState({ step: 'profileProposed' }, filePath);
+      await clearSetupState(filePath);
+      await expect(readSetupState(filePath)).resolves.toBeNull();
+    });
+  });
+
+  it('confines the resolved setupState path to the data root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'weJobSearch-setupState-root-'));
+    try {
+      const resolved = resolveProfilePaths({ dataRoot: dir });
+      expect(resolved.setupState.startsWith(dir)).toBe(true);
+      expect(() =>
+        resolveProfilePaths({ dataRoot: dir, setupStatePath: join(tmpdir(), 'outside-setupState.json') }),
+      ).toThrow(/confinement violation/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

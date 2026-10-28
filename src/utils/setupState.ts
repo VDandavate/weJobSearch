@@ -1,6 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { z } from 'zod';
+import { writeFileAtomically } from './atomicWrite';
 import { canonicalSetupStatePath, redactHomePrefix } from './canonicalDataRoot';
+import { assertNotReadOnly } from './readOnlyGuard';
 
 // Session-resumption checkpoint for profile setup (EUO-15, goals G1/G4).
 // A minimal, schema-validated setupState.json under the canonical data root
@@ -20,11 +22,25 @@ import { canonicalSetupStatePath, redactHomePrefix } from './canonicalDataRoot';
 export const setupStepSchema = z.enum(['documentsIngested', 'profileProposed', 'confirmed']);
 export type SetupStep = z.infer<typeof setupStepSchema>;
 
+// Cursor and answers are optional so the original three-key checkpoint
+// (step/updatedAt/notes) still parses. They are written by the setup question
+// cursor (answerSetupQuestion) and read by getSetupQuestion; the file remains
+// one checkpoint under the canonical data root.
+export const setupCursorSchema = z
+  .object({
+    questionId: z.string(),
+  })
+  .strict();
+export type SetupCursor = z.infer<typeof setupCursorSchema>;
+
 export const setupStateSchema = z
   .object({
     step: setupStepSchema,
     updatedAt: z.string().datetime(),
     notes: z.string().optional(),
+    cursor: setupCursorSchema.optional(),
+    answers: z.record(z.string(), z.unknown()).optional(),
+    planVersion: z.number().int().positive().optional(),
   })
   .strict();
 export type SetupState = z.infer<typeof setupStateSchema>;
@@ -77,4 +93,31 @@ export async function readSetupState(
     throw new Error(`Malformed setup state at ${redactHomePrefix(filePath)}: ${result.error.message}`);
   }
   return result.data;
+}
+
+// Write side of the checkpoint (setupQuestionCursor T03). Refuses to replace a
+// malformed existing file (readSetupState throws first) and always refreshes
+// updatedAt unless the caller supplies one. Atomic replace only.
+export async function writeSetupState(
+  state: Omit<SetupState, 'updatedAt'> & { updatedAt?: string },
+  filePath: string = defaultSetupStatePath(),
+  now: Date = new Date(),
+): Promise<SetupState> {
+  assertNotReadOnly(filePath);
+  await readSetupState(filePath);
+  const parsed = setupStateSchema.safeParse({
+    ...state,
+    updatedAt: state.updatedAt ?? now.toISOString(),
+  });
+  if (!parsed.success) {
+    throw new Error(`Invalid setup state: ${parsed.error.message}`);
+  }
+  await writeFileAtomically(filePath, `${JSON.stringify(parsed.data, null, 2)}\n`);
+  return parsed.data;
+}
+
+// Clears the checkpoint after a confirmed commit (or an explicit restart).
+export async function clearSetupState(filePath: string = defaultSetupStatePath()): Promise<void> {
+  assertNotReadOnly(filePath);
+  await rm(filePath, { force: true });
 }
