@@ -57,6 +57,13 @@ other capability (SDD Section 1.5). A request that already names a listed
 capability keeps its own command; this trigger is for setup intent only.
 Hosts without command files read `.claude/commands/setup.md` and follow it.
 
+Setup is a server-side question plan, not prose. During first-run setup call
+`getSetupQuestion` and ask only the question it returns, one per turn; send
+the user's answer through `answerSetupQuestion` with that exact questionId;
+write the profile only through `commitSetup` after explicit confirmation.
+Never combine, reorder, or retype fields, and never write a profile file
+before `commitSetup({ confirmed: true })`.
+
 Follow the numbered build sequence in AGENTS.md; do not skip ahead. Test only
 against fixtures/, never against real profile/ or canonical-root data files.
 
@@ -67,7 +74,8 @@ The CLI menu:
   report, reviewQueue, confirmApp.
 
 Profile setup inside an agentic host uses the MCP tools, not the CLI:
-getUserProfile (read-only inspection), initializeUserProfile (first-time
+getSetupQuestion / answerSetupQuestion / commitSetup for the first-run question
+cursor, getUserProfile (read-only inspection), initializeUserProfile (first-time
 creation, requires user confirmation), updateUserProfile (partial updates,
 requires user confirmation). The engine never fabricates profile data.
 
