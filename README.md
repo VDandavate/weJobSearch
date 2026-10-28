@@ -405,9 +405,11 @@ host (Claude Code, Cursor, OpenCode, etc.) and the agent will walk you through
 setup using the generated `setup` command. The flow is:
 
 1. **Inspect** — the agent calls `getUserProfile` and shows the resolved data
-   root and which profile files exist.
-2. **Documents** — you point the agent at folders with resumes; it calls
-   `ingestDocuments` to parse them and propose a profile.
+   root and which profile files exist. Its first-run steps point at the question
+   plan, so the rest of the flow below is what the agent follows.
+2. **Documents** — the agent asks which folders hold your resumes, then calls
+   `ingestDocuments` once per folder. Files outside the data root are copied
+   into its `documents/` directory first; your originals are never modified.
 3. **Profile draft** — the agent asks the contact and resume questions one at a
    time from the server-side plan (`getSetupQuestion`), showing each question's
    reason, recommendation, and a plain-text section table (`contact`,
@@ -425,8 +427,9 @@ setup using the generated `setup` command. The flow is:
    (`noRelocation`, `noStaffingAgencies`, `clearanceMismatch`,
    `belowMinSalary`) and a manual-review rule (`remoteOnly`) only if
    `noRelocation` is declined.
-8. **Screening answers** — derived from earlier answers; only notice period,
-   per-skill years, and sponsorship type (when required) are asked.
+8. **Screening answers** — derived from earlier answers; only the notice period
+   and, when you require sponsorship, the sponsorship type are asked. Nothing
+   you already answered is asked twice.
 9. **Preview and confirm** — when the plan returns `readyToConfirm`, the agent
    shows the four file paths only (no contents, no diff). **Nothing is written
    before you confirm.** On confirmation, `commitSetup({ confirmed: true })`
@@ -521,7 +524,7 @@ Use each command's `--help` flag for the exact option set.
 ```bash
 npm run lint          # tsc --noEmit (type-check only)
 npm run build         # tsc (emit to dist/)
-npm test              # vitest run (1085 tests across 68 files in this baseline)
+npm test              # vitest run (1086 tests across 68 files in this baseline)
 npm run namingLinter  # strict camelCase/PascalCase/zero-underscore scan, no build needed
 npm run setupHooks    # per-clone: git config core.hooksPath .githooks
 ```
