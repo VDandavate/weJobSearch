@@ -568,13 +568,20 @@ export async function readUserProfile(
     files.screeningAnswers.configured &&
     files.networkingContacts.configured;
   const documentsDir = join(dirname(paths.masterProfile), documentsDirectoryName);
+  // These steps are the server-side half of the first-run contract, and the
+  // model reads them as instructions. They must describe the question-plan
+  // cursor (getSetupQuestion -> answerSetupQuestion -> commitSetup), never the
+  // retired "stage into documents/, review a proposed profile, then call
+  // initializeUserProfile" sequence: when they described that sequence, the
+  // model skipped the resume-folder question, copied files itself, and
+  // announced a profile draft without ever opening the cursor.
   const onboardingSteps = profileEntirelyAbsent
     ? [
-        `Place your resume and related documents in the documents/ directory under the canonical data root (${documentsDir}).`,
-        'Run ingestDocuments on that directory to parse the documents and propose a profile.',
-        'Review the proposed profile returned by ingestDocuments.',
-        'Confirm the profile with initializeUserProfile (first-time creation) or updateUserProfile (corrections).',
-        'If the user has no resume files to stage, say so and build the profile by interview instead.',
+        `Ask which folder or folders hold the user's resumes. The tool reads only inside the data root, so those files are copied into ${documentsDir} and the originals are left untouched; the confinement error names that directory when a path falls outside it.`,
+        'Run ingestDocuments once per folder the user named (top-level scan only). Name every unreadable, empty, or image-only file and ask for the details instead of inventing content.',
+        'Call getSetupQuestion and ask only the question it returns, one question per turn.',
+        'Send each answer through answerSetupQuestion with that exact questionId. Never combine questions and never type a field name the plan did not offer.',
+        'When the plan returns readyToConfirm and the user confirms, call commitSetup({ confirmed: true }). That is the only step that writes a profile file.',
       ]
     : undefined;
 

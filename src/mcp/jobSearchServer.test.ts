@@ -1235,6 +1235,8 @@ describe('jobSearchServer profile tools', () => {
         expect(payload.onboardingSteps).toHaveLength(5);
         expect(payload.onboardingSteps[0]).toContain('documents');
         expect(payload.onboardingSteps[1]).toContain('ingestDocuments');
+        expect(payload.onboardingSteps[2]).toContain('getSetupQuestion');
+        expect(payload.onboardingSteps[4]).toContain('commitSetup');
         expect(result.structuredContent?.files).toBeDefined();
         expect(result.structuredContent?.onboardingSteps).toHaveLength(5);
       } finally {

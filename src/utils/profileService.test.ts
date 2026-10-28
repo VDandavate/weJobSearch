@@ -164,13 +164,27 @@ describe('readUserProfile', () => {
       const steps = state.onboardingSteps;
       expect(steps).toBeDefined();
       expect(steps).toHaveLength(5);
-      expect(steps![0]).toContain('documents');
+      expect(steps![0].toLowerCase()).toContain('ask which folder');
       expect(steps![0]).toContain(join(root, 'profile', 'documents'));
       expect(steps![1]).toContain('ingestDocuments');
-      expect(steps![2].toLowerCase()).toContain('review');
-      expect(steps![3].toLowerCase()).toContain('confirm');
-      expect(steps![3]).toContain('initializeUserProfile');
-      expect(steps![4].toLowerCase()).toContain('interview');
+      expect(steps![2]).toContain('getSetupQuestion');
+      expect(steps![3]).toContain('answerSetupQuestion');
+      expect(steps![4]).toContain('commitSetup');
+      expect(steps![4]).toContain('confirmed: true');
+    });
+  });
+
+  // Regression guard for the setup-flow complaint (2026-10-28): the server's
+  // onboarding text contradicted the setup directive, so the model staged
+  // files itself and proposed a profile draft instead of opening the cursor.
+  it('never routes first-run setup around the question plan', async () => {
+    await withEmptyProfileDir(async (root) => {
+      const state = await readUserProfile(overridesFor(root));
+      const joined = (state.onboardingSteps ?? []).join(' ');
+      expect(joined).not.toContain('initializeUserProfile');
+      expect(joined).not.toContain('updateUserProfile');
+      expect(joined).not.toMatch(/Place your resume/i);
+      expect(joined).not.toMatch(/propose a profile|proposed profile/i);
     });
   });
 
