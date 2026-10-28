@@ -1091,6 +1091,24 @@ describe('legacy directories.dataRoot migration warning (U43)', () => {
 });
 
 describe('init Phase B correctness (B1-B4, isolated roots only)', () => {
+  it('refuses a non-interactive stdin with a usable message instead of "readline was closed"', async () => {
+    // Regression: inside an agent shell stdin is not a TTY, so the first
+    // question threw a bare readline error and setup could not start at all.
+    const stdin = process.stdin as { isTTY?: boolean };
+    const originalIsTTY = stdin.isTTY;
+    stdin.isTTY = undefined;
+    try {
+      const result = await runInitCommand({});
+      expect(result.exitCode).toBe(1);
+      const text = result.printedLines.join('\n');
+      expect(text).toContain('interactive terminal');
+      expect(text).toContain('initializeUserProfile');
+      expect(text).not.toContain('readline was closed');
+    } finally {
+      stdin.isTTY = originalIsTTY;
+    }
+  });
+
   it('B1: runInitCommand seeds variants so validate passes and preview/generate reach the profile guard', async () => {
     const checkoutRoot = repoRootFromModule();
     const dir = await mkdtemp(join(tmpdir(), 'weJobSearch-initB1-'));

@@ -31,7 +31,10 @@ export function agentConfigPaths(repoRoot: string): AgentConfigPaths {
 
 // The shared opening every generated rules/commands file carries: point each
 // agent directly at the SDD (the executable spec) and AGENTS.md (the execution
-// checklist), then restate the project-wide absolutes from both.
+// checklist), then restate the project-wide absolutes from both. The setup
+// trigger here is deliberate: OpenCode sessions read only AGENTS.md and the
+// opencode instructions array, so any profile-setup phrasing must be routable
+// without loading .claude/commands/setup.md first.
 export const sharedBaseRules = `# WeJobSearch agent guidelines
 
 Read the full specification in \`docs/weJobSearch-SDD.md\` and the execution
@@ -83,8 +86,13 @@ Hard rules that apply to every change, with no exceptions:
 
 8. Strict data-root confinement. The tool never reads or writes outside the resolved data root. Users stage files by copying into ~/Documents/weJobSearch/<username>/documents/ via the OS; the engine resolves the root through canonicalDataRoot.ts, and the only relocation mechanisms are --dataRoot and WEJOBSEARCHDATAROOT — both move the entire root, never a single file path. No CLI or MCP schema accepts a per-file path override; all filenames are fixed (masterProfile.md, jobPreferences.yaml, screeningAnswers.json, networkingContacts.json, resumeVariants.yaml, applicationHistory.json). Templates resolve through a fixed allowlist (shipped templates/ and <dataRoot>/templates/ only, via resolveTemplatePath). Report file output is redacted by default with a terminal warning; profile completion blocks on required-field placeholders.
 
-First-run setup: run the \`setup\` command. Hosts without command files read
-\`.claude/commands/setup.md\` and follow it.
+First-run setup: any user request to set up, initialize, or rebuild the
+profile ("set up my profile" or any phrasing of first-run setup) means: run
+the \`setup\` command and follow \`.claude/commands/setup.md\` exactly, step by
+step. Do not improvise the flow, and do not infer that setup chains into any
+other capability (SDD Section 1.5). A request that already names a listed
+capability keeps its own command; this trigger is for setup intent only.
+Hosts without command files read \`.claude/commands/setup.md\` and follow it.
 
 Follow the numbered build sequence in AGENTS.md; do not skip ahead. Test only
 against fixtures/, never against real profile/ or canonical-root data files.`;
@@ -102,6 +110,7 @@ export interface OpenCodeConfig {
   $schema: string;
   instructions: readonly string[];
   mcp: Record<string, OpenCodeLocalMcp>;
+  commands?: Record<string, { description?: string; template?: string }>;
 }
 
 // The generated opencode.json re-points at the source-of-truth instruction
@@ -112,6 +121,15 @@ export function buildOpenCodeConfig(repoRoot: string): OpenCodeConfig {
   return {
     $schema: 'https://opencode.ai/config.json',
     instructions: [executionChecklistDoc, sourceOfTruthDoc],
+    // OpenCode reads slash commands from config only; without this it has no
+    // /setup entrypoint and a fresh user is left with no way to start.
+    commands: {
+      setup: {
+        description: 'First-run onboarding: interview, preview, then write the profile',
+        template:
+          'Follow the first-run setup flow in .claude/commands/setup.md exactly, step by step. Do not skip ahead, and do not chain into any other capability.',
+      },
+    },
     mcp: {
       jobSearch: {
         type: 'local',

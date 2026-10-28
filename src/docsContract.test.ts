@@ -381,3 +381,10 @@ describe('docsContract', () => {
     expect(setup).toContain('Before staging anything');
     expect(setup).toContain('nothing chains automatically');
   });
+
+  it('AGENTS.md routes natural-language profile-setup phrasing to the setup command (no paraphrase drift)', () => {
+    const agents = readDoc('AGENTS.md').replace(/\s+/g, ' ');
+    expect(agents).toContain('set up, initialize, or rebuild the profile');
+    expect(agents).toContain('follow `.claude/commands/setup.md`');
+    expect(agents).toContain('Do not improvise the flow');
+  });

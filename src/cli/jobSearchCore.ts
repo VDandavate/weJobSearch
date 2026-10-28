@@ -1209,6 +1209,19 @@ export async function runInitCommand(
   if (args.help === true) {
     return { exitCode: 0, printedLines: initHelpText() };
   }
+  // The wizard is a readline interview. Inside an agent shell stdin is not a
+  // TTY, so the first question dies with a bare "readline was closed" and the
+  // user is left with no setup at all. Say what to do instead.
+  if (prompt === undefined && process.stdin.isTTY !== true) {
+    return {
+      exitCode: 1,
+      printedLines: [
+        'init needs an interactive terminal, and stdin here is not one. Nothing was written.',
+        'Run it in your own terminal: node dist/cli/jobSearchCore.js init',
+        'In an agent session, use the setup flow instead: the profile MCP tools (getUserProfile, ingestDocuments, initializeUserProfile).',
+      ],
+    };
+  }
   const ctx = prompt ?? createCliPromptContext();
   try {
     const result = await runInitWizard({

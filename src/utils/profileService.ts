@@ -574,6 +574,7 @@ export async function readUserProfile(
         'Run ingestDocuments on that directory to parse the documents and propose a profile.',
         'Review the proposed profile returned by ingestDocuments.',
         'Confirm the profile with initializeUserProfile (first-time creation) or updateUserProfile (corrections).',
+        'If the user has no resume files to stage, say so and build the profile by interview instead.',
       ]
     : undefined;
 

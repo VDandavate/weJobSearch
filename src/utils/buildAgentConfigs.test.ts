@@ -9,6 +9,7 @@ import {
   buildClaudeCommandsText,
   buildOpenCodeConfig,
   buildWindsurfRules,
+  sharedBaseRules,
   sourceOfTruthDoc,
   writeAgentConfigs,
 } from './buildAgentConfigs';
@@ -61,11 +62,23 @@ describe('buildAgentConfigs', () => {
     });
   });
 
+  it('routes natural-language profile-setup phrasing to the setup command (OpenCode reads no command files)', () => {
+    // opencode loads only AGENTS.md + opencode.json instructions; if AGENTS.md
+    // loses this trigger, "set up my profile" improvises instead of routing.
+    const rules = sharedBaseRules.replace(/\s+/g, ' ');
+    expect(rules).toContain('set up, initialize, or rebuild the profile');
+    expect(sharedBaseRules).toContain('.claude/commands/setup.md');
+    expect(sharedBaseRules).toContain('Do not improvise the flow');
+  });
+
   it('opencode.json is structurally valid for the installed OpenCode config schema', async () => {
     await withTempDir(async (dir) => {
       const config = buildOpenCodeConfig(dir);
       expect(config.$schema).toBe('https://opencode.ai/config.json');
       expect([...config.instructions].sort()).toEqual(['AGENTS.md', 'docs/weJobSearch-SDD.md'].sort());
+      // OpenCode has no command-file convention, so /setup must be registered
+      // here or a fresh user has no first-run entrypoint at all.
+      expect(config.commands?.setup.template).toContain('.claude/commands/setup.md');
 
       const jobSearch = config.mcp.jobSearch;
       expect(jobSearch.type).toBe('local');
