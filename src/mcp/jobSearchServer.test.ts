@@ -1179,11 +1179,11 @@ describe('jobSearchServer profile tools', () => {
         const payload = JSON.parse(result.text);
         expect(payload.configured).toBe(false);
         expect(payload.incompleteReasons.length).toBe(4);
-        expect(payload.onboardingSteps).toHaveLength(4);
+        expect(payload.onboardingSteps).toHaveLength(5);
         expect(payload.onboardingSteps[0]).toContain('documents');
         expect(payload.onboardingSteps[1]).toContain('ingestDocuments');
         expect(result.structuredContent?.files).toBeDefined();
-        expect(result.structuredContent?.onboardingSteps).toHaveLength(4);
+        expect(result.structuredContent?.onboardingSteps).toHaveLength(5);
       } finally {
         await connected.close();
       }

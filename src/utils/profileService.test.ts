@@ -163,13 +163,14 @@ describe('readUserProfile', () => {
       const state = await readUserProfile(overridesFor(root));
       const steps = state.onboardingSteps;
       expect(steps).toBeDefined();
-      expect(steps).toHaveLength(4);
+      expect(steps).toHaveLength(5);
       expect(steps![0]).toContain('documents');
       expect(steps![0]).toContain(join(root, 'profile', 'documents'));
       expect(steps![1]).toContain('ingestDocuments');
       expect(steps![2].toLowerCase()).toContain('review');
       expect(steps![3].toLowerCase()).toContain('confirm');
       expect(steps![3]).toContain('initializeUserProfile');
+      expect(steps![4].toLowerCase()).toContain('interview');
     });
   });
 

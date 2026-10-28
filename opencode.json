@@ -4,6 +4,12 @@
     "AGENTS.md",
     "docs/weJobSearch-SDD.md"
   ],
+  "commands": {
+    "setup": {
+      "description": "First-run onboarding: interview, preview, then write the profile",
+      "template": "Follow the first-run setup flow in .claude/commands/setup.md exactly, step by step. Do not skip ahead, and do not chain into any other capability."
+    }
+  },
   "mcp": {
     "jobSearch": {
       "type": "local",

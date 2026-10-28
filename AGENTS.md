@@ -6,6 +6,8 @@ This file is read automatically by agentic coding tools (OpenCode, Claude Code, 
 
 The full specification is `docs/weJobSearch-SDD.md`. This file is a summary and execution checklist. If anything here conflicts with the SDD, the SDD wins. If the SDD is missing or you cannot find it, stop and ask rather than improvising.
 
+**Setup routing (first run or after a wipe):** Any user request to set up, initialize, or rebuild the profile ("set up my profile" or any phrasing of first-run setup) means: run the `setup` command and follow `.claude/commands/setup.md` exactly, step by step. Do not improvise the flow, and do not infer that setup chains into any other capability (SDD Section 1.5). A request that already names a listed capability keeps its own command; this trigger is for setup intent only.
+
 **The baseline build is complete.** `HANDOFF.md` documents what was built, verification results, judgment calls, and deviations. Do not rebuild the project from scratch; extend or fix it. If you are tempted to re-run "the build sequence", you are in the wrong session — read HANDOFF.md instead.
 
 ## Non-negotiable rules
@@ -31,7 +33,7 @@ These apply to every file you create or edit, with no exceptions:
 npm install            # needs Node >= 24 (.nvmrc pins 26.5.0)
 npm run build          # tsc -> dist/ (dist/ is gitignored; required before CLI/MCP runs)
 npm run lint           # tsc --noEmit (typecheck, no output)
-npm test               # vitest run (all suites; 1038 tests / 65 files in this baseline)
+npm test               # vitest run (all suites; 1041 tests / 65 files in this baseline)
 npx vitest run src/evaluators/fitEvaluator.test.ts   # single file
 npm run namingLinter   # naming gate; works on a fresh clone without build (Node 24+ type stripping)
 npm run setupHooks     # one-time per clone: git config core.hooksPath .githooks (pre-commit naming gate)
