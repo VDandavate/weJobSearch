@@ -3,6 +3,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { screeningAnswersSchema } from '../cli/initWizard';
 import {
+  answerSetupQuestion,
+  commitSetup,
+  getSetupQuestion,
+} from '../core/setupCursor';
+import {
   confirmApplicationSubmission,
   draftCoverLetterForRole,
   draftOutreachMessage,
@@ -50,6 +55,7 @@ export interface McpServerDependencies {
   screeningAnswersPath?: string;
   historyPath?: string;
   contactsPath?: string;
+  setupStatePath?: string;
   savedSearchesPath?: string;
   searchHistoryPath?: string;
   // Whole data-root relocation (U44): when set, every tool that resolves
@@ -322,6 +328,144 @@ export function createMcpServer(dependencies: McpServerDependencies = {}): McpSe
           fileCount: result.inventory.fileCount,
           dirCount: result.inventory.dirCount,
           backupPath: result.backupPath,
+        },
+      };
+    },
+  );
+
+  server.registerTool(
+    'getSetupQuestion',
+    {
+      description:
+        'Return the current first-run setup question from the server-side question plan, one at a time. No arguments on a normal call. Read-only: never writes a profile file. When a checkpoint exists it resumes at the stored cursor and reports lastAnsweredAt instead of discarding answers. Pass restart: true only after the user explicitly asks to start over. Ask only the returned question, then call answerSetupQuestion.',
+      inputSchema: {
+        restart: z
+          .boolean()
+          .optional()
+          .describe('Discard stored setup answers and restart from the first question. Only after the user asks to start over.'),
+      },
+    },
+    async (args) => {
+      const payload = await getSetupQuestion({
+        restart: args.restart,
+        setupStatePath: dependencies.setupStatePath,
+        dataRoot: dependencies.dataRoot,
+      });
+      const text =
+        payload.status === 'readyToConfirm'
+          ? `Ready to confirm. Files: ${(payload.preview ?? []).join(', ')}`
+          : [
+              `Question ${payload.index} of ${payload.total}: ${payload.prompt}`,
+              `Why: ${payload.why}`,
+              `Recommended: ${payload.recommended}`,
+              payload.options.length > 0 ? `Options: ${payload.options.join(', ')}` : '',
+              payload.draft === undefined ? '' : payload.draft,
+            ]
+              .filter((line) => line.length > 0)
+              .join('\n');
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: {
+          status: payload.status,
+          questionId: payload.questionId,
+          section: payload.section,
+          prompt: payload.prompt,
+          why: payload.why,
+          options: payload.options,
+          recommended: payload.recommended,
+          required: payload.required,
+          index: payload.index,
+          total: payload.total,
+          draft: payload.draft,
+          resuming: payload.resuming,
+          lastAnsweredAt: payload.lastAnsweredAt,
+          changedQuestions: payload.changedQuestions,
+          preview: payload.preview,
+        },
+      };
+    },
+  );
+
+  server.registerTool(
+    'answerSetupQuestion',
+    {
+      description:
+        'Answer the current setup question by its exact questionId and return the next question. Rejects an out-of-order or mismatched id and validates the answer for that field before writing anything. Pass null for answer to skip an optional question; a required question rejects the skip with its reason. Writes only the setupState.json checkpoint - never a profile file.',
+      inputSchema: {
+        questionId: z.string().describe('The questionId returned by getSetupQuestion.'),
+        answer: z
+          .unknown()
+          .describe('The answer for this field. Pass null to skip an optional question.'),
+      },
+    },
+    async (args) => {
+      const payload = await answerSetupQuestion(
+        { questionId: args.questionId, answer: args.answer },
+        { setupStatePath: dependencies.setupStatePath, dataRoot: dependencies.dataRoot },
+      );
+      const text =
+        payload.status === 'readyToConfirm'
+          ? `Ready to confirm. Files: ${(payload.preview ?? []).join(', ')}`
+          : [
+              `Question ${payload.index} of ${payload.total}: ${payload.prompt}`,
+              `Why: ${payload.why}`,
+              `Recommended: ${payload.recommended}`,
+              payload.options.length > 0 ? `Options: ${payload.options.join(', ')}` : '',
+              payload.draft === undefined ? '' : payload.draft,
+            ]
+              .filter((line) => line.length > 0)
+              .join('\n');
+      return {
+        content: [{ type: 'text', text }],
+        structuredContent: {
+          status: payload.status,
+          questionId: payload.questionId,
+          section: payload.section,
+          prompt: payload.prompt,
+          why: payload.why,
+          options: payload.options,
+          recommended: payload.recommended,
+          required: payload.required,
+          index: payload.index,
+          total: payload.total,
+          draft: payload.draft,
+          resuming: payload.resuming,
+          lastAnsweredAt: payload.lastAnsweredAt,
+          changedQuestions: payload.changedQuestions,
+          preview: payload.preview,
+        },
+      };
+    },
+  );
+
+  server.registerTool(
+    'commitSetup',
+    {
+      description:
+        'Write the profile from the stored setup answers. Requires explicit user confirmation (confirmed: true) - writes NOTHING without it. Builds the profile payload server-side, refuses when required answers are missing (the error names the blocking field ids), delegates to initializeUserProfile, then clears the setup checkpoint. Local write only; nothing is sent anywhere.',
+      inputSchema: {
+        confirmed: z
+          .boolean()
+          .describe('Must be true, set by the user, to authorize the write. Defaults to false so no write can happen by accident.'),
+      },
+    },
+    async (args) => {
+      const result = await commitSetup(
+        { confirmed: args.confirmed },
+        { setupStatePath: dependencies.setupStatePath, dataRoot: dependencies.dataRoot },
+      );
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ filesWritten: result.filesWritten, summary: result.summary }, null, 2),
+          },
+        ],
+        structuredContent: {
+          filesWritten: result.filesWritten,
+          filesUpdated: result.filesUpdated,
+          sections: result.sections,
+          summary: result.summary,
         },
       };
     },
